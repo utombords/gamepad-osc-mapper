@@ -37,12 +37,22 @@ jobs:
             if ($env:GITHUB_REF_NAME -eq $null -or $env:GITHUB_REF_NAME -eq '') { $zipName = "GamepadOSCMapper-onefolder-win64.zip" }
             Compress-Archive -Path dist/GamepadOSCMapper/* -DestinationPath dist/$zipName -Force
           }
+      - name: Create one-file ZIP (fat EXE)
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path dist/GamepadOSCMapper_onefile.exe) {
+            $zipName = "GamepadOSCMapper-onefile-$env:GITHUB_REF_NAME-win64.zip"
+            if ($env:GITHUB_REF_NAME -eq $null -or $env:GITHUB_REF_NAME -eq '') { $zipName = "GamepadOSCMapper-onefile-win64.zip" }
+            Compress-Archive -Path dist/GamepadOSCMapper_onefile.exe -DestinationPath dist/$zipName -Force
+          }
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: GamepadOSCMapper-win
           path: |
             dist/GamepadOSCMapper-onefolder-*-win64.zip
+            dist/GamepadOSCMapper-onefile-*-win64.zip
 
   release:
     needs: build-windows
@@ -58,6 +68,7 @@ jobs:
         with:
           files: |
             dist/GamepadOSCMapper-onefolder-*-win64.zip
+            dist/GamepadOSCMapper-onefile-*-win64.zip
           token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

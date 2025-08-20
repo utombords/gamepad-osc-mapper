@@ -103,3 +103,27 @@ coll = COLLECT(
     upx_exclude=[],
     name=app_name,
 )
+
+# Additionally build a standalone one-file EXE (fat) for users who prefer a single binary
+exe_onefile = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name=f"{app_name}_onefile",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=icon_file,
+    version=version_file,
+)
