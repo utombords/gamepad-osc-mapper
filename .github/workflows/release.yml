@@ -25,6 +25,28 @@ jobs:
       - name: Build artifacts
         run: |
           pyinstaller --clean --noconfirm main.spec
+      - name: Import code-signing certificate
+        if: ${{ secrets.CERT_PFX != '' && secrets.CERT_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String('${{ secrets.CERT_PFX }}')
+          [IO.File]::WriteAllBytes('dist/cert.pfx', $bytes)
+          echo "::notice title=Code Signing::PFX imported to dist/cert.pfx"
+      - name: Code sign artifacts (one-file EXE)
+        if: ${{ secrets.CERT_PFX != '' && secrets.CERT_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          $signtool = 'signtool'
+          & $signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f dist/cert.pfx /p '${{ secrets.CERT_PASSWORD }}' dist/GamepadOSCMapper.exe
+      - name: Code sign artifacts (one-folder EXE & DLLs)
+        if: ${{ secrets.CERT_PFX != '' && secrets.CERT_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          if (Test-Path dist/GamepadOSCMapper) {
+            Get-ChildItem -Recurse dist/GamepadOSCMapper -Include *.exe,*.dll | ForEach-Object {
+              signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f dist/cert.pfx /p '${{ secrets.CERT_PASSWORD }}' $_.FullName
+            }
+          }
       - name: Hash artifact
         shell: pwsh
         run: |
