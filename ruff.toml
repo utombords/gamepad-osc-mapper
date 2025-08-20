@@ -8,4 +8,3 @@ indent-style = "tab"
 
 [lint.isort]
 known-first-party = ["app"]
-profile = "black"
