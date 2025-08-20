@@ -22,9 +22,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller Flask Flask-SocketIO python-engineio python-socketio python-osc jinja2
-      - name: Build onefile
+      - name: Build artifacts
         run: |
-          pyinstaller --clean --noconfirm --collect-all flask --collect-all flask_socketio --collect-all engineio --collect-all socketio --collect-all jinja2 main.spec
+          pyinstaller --clean --noconfirm main.spec
       - name: Hash artifact
         shell: pwsh
         run: |
