@@ -1,8 +1,8 @@
 Gamepad OSC Mapper
 ===================
 
-[![Build & Release](https://img.shields.io/github/actions/workflow/status/OWNER/REPO/release.yml?label=build%20%26%20release)](https://github.com/OWNER/REPO/actions)
-[![Lint](https://img.shields.io/github/actions/workflow/status/OWNER/REPO/lint.yml?label=lint)](https://github.com/OWNER/REPO/actions)
+[![Build & Release](https://img.shields.io/github/actions/workflow/status/utombords/gamepad-osc-mapper/release.yml?label=build%20%26%20release)](https://github.com/utombords/gamepad-osc-mapper/actions)
+[![Lint](https://img.shields.io/github/actions/workflow/status/utombords/gamepad-osc-mapper/lint.yml?label=lint)](https://github.com/utombords/gamepad-osc-mapper/actions)
 
 Gamepad OSC Mapper lets you map inputs from XInput (Xbox) and JoyShockLibrary (DualShock/DualSense/Switch) controllers to OSC messages over UDP. Configure mappings in a local web UI, send to any OSC target on your LAN, and tune rate/format precisely.
 
