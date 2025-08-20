@@ -34,7 +34,7 @@ The Gamepad OSC Mapper is a Python and JavaScript application designed to bridge
     *   Variables can be configured to automatically dispatch specific OSC messages (with defined address, data type, and content like current value or fixed string) whenever their value changes.
 
 4.  **Sophisticated Layered Control Schemes:**
-    *   Configure multiple, independent layers of input mappings (default layer, plus user-definable layers like 'A', 'B', 'C', 'D'), each with its own set of input-to-action rules.
+    *   Configure multiple, independent layers of input mappings (e.g., 'A', 'B', 'C', 'D'), each with its own set of input-to-action rules.
     *   Switch between layers seamlessly using designated gamepad inputs or global hotkeys. Layer configurations (name, mappings) are stored in `active_config.json`.
     *   The `ChannelProcessingService` dynamically rebuilds its cache of continuous actions (like 'Direct' or 'Rate') when the active layer changes, ensuring correct real-time processing.
 
@@ -88,7 +88,7 @@ Backend Components (Python - located in `/app/`):
         *   **Initialization (`__init__`):
             *   Calls `_ensure_config_dir_exists()` to create the `configs/` directory if it doesn't exist.
             *   Calls `_load_initial_config()` to load `active_config.json`. If this fails (file not found, invalid JSON), it attempts to load `default_config.json` via `_get_default_config()`.
-            *   If `default_config.json` also fails or is not present, it falls back to a hardcoded default configuration structure. This structure includes top-level keys such as: `osc_settings`, `web_settings`, `input_settings`, `internal_channels` (initially empty), `internal_variables` (initially empty), `layers` (with 'default', 'A', 'B', 'C', 'D' sub-layers, each with a name and empty `input_mappings`), `layer_keybinds`, and `layer_change_osc_actions`.
+            *   If `default_config.json` also fails or is not present, it falls back to a hardcoded default configuration structure. This structure includes top-level keys such as: `osc_settings`, `web_settings`, `input_settings`, `internal_channels` (initially empty), `internal_variables` (initially empty), `layers` (with 'A', 'B', 'C', 'D' sub-layers, each with a name and empty `input_mappings`), `layer_keybinds`, and `layer_change_osc_actions`.
             *   The loaded or default configuration is stored in `self.active_config`.
             *   Initializes an empty list `self._config_change_subscribers` for the pub/sub pattern.
         *   **Core File Operations:**
@@ -394,8 +394,7 @@ Backend Components (Python - located in `/app/`):
                 3.  If an instance already exists, or after creating a new one, it returns the (single) stored instance from `_instances`.
             *   This pattern is used by `InputService` to ensure there's only one point of control for hardware input.
             *   The file includes commented-out example usage within an `if __name__ == '__main__':` block for demonstration and testing purposes.
-    *   **`helpers.py`**: 
-        *   **Responsibility & Details:** This file is intended as a placeholder for general-purpose, stateless utility functions that might be used across various backend modules. Currently, it is minimal and only contains a `print("helpers.py loaded")` statement, confirming its placeholder status.
+    
 
 8.  **`/models/` (Data Models)**
     *   **`config_model.py`**: Currently minimal. Intended for defining Python classes or Pydantic models to represent the structure of `active_config.json` for validation or easier typed access, but this is not extensively used yet.

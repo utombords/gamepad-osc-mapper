@@ -21,7 +21,6 @@ project_root = os.getcwd()
 # Paths to your main script and icon
 main_script = os.path.join(project_root, 'app', 'main.py')
 icon_file = os.path.join(project_root, 'static', 'favicon.ico')
-version_file = os.path.join(project_root, 'version_info.txt')
 
 # Collect data files
 # Syntax: (source_path_on_disk, destination_in_bundle)
@@ -89,7 +88,6 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=icon_file,
-    version=version_file,
 )
 
 # Also build a one-directory bundle (more AV-friendly, includes DLLs alongside exe)
@@ -125,5 +123,4 @@ exe_onefile = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=icon_file,
-    version=version_file,
 )
