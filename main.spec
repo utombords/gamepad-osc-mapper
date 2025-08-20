@@ -82,7 +82,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,  # UPX compression can reduce file size but might trigger antiviruses
+    upx=False,  # Disable UPX to reduce false-positive detections by AV
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,  # True for a console window (debug), False for a GUI app (no console)
@@ -93,14 +93,14 @@ exe = EXE(
     icon=icon_file,
 )
 
-# For a one-directory bundle (easier for debugging, includes all DLLs alongside exe)
-# coll = COLLECT(
-#     exe,
-#     a.binaries,
-#     a.zipfiles,
-#     a.datas,
-#     strip=False,
-#     upx=True,
-#     upx_exclude=[],
-#     name=app_name,
-# )
+# Also build a one-directory bundle (more AV-friendly, includes DLLs alongside exe)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name=app_name,
+)
