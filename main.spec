@@ -72,13 +72,10 @@ a = Analysis(
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
+# Build a thin EXE (does not embed binaries/datas); COLLECT will provide sidecar files
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
     name=app_name,
     debug=False,
     bootloader_ignore_signals=False,
