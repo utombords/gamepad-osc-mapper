@@ -1,0 +1,726 @@
+Project Name: Gamepad OSC Mapper
+
+Purpose of this Document:
+This document provides an in-depth description of the Gamepad OSC Mapper application. It details its architecture, the functionality of its backend and frontend components, data structures, inter-module communication strategies, and key dependencies. This document aims to serve as a comprehensive guide for understanding the project's design and implementation.
+
+Core Functionality:
+The Gamepad OSC Mapper is a Python and JavaScript application designed to bridge gamepad inputs with creative and professional software that supports Open Sound Control (OSC). It allows users to:
+
+1.  **Enhanced Gamepad Connectivity and Input Processing:**
+    *   Connect and manage multiple gamepads concurrently, supporting both standard XInput controllers (e.g., Xbox series) and a wide array of other controllers via JoyShockLibrary (JSL), including Nintendo Switch Pro Controllers, Sony DualShock 4, and Sony DualSense.
+    *   Access a comprehensive suite of input types: buttons, analog sticks, triggers, and, for compatible JSL devices, **IMU (motion control) data** (accelerometer and gyroscope).
+    *   Benefit from backend input normalization, where diverse raw input names from different controller types are translated into a standardized set of generic input names (e.g., "A", "LEFT_STICK_X") for consistent mapping. This mapping is loaded from a central definition file (`app/definitions/input_mapping_definitions.json`) at startup.
+    *   For XInput controllers, analog inputs (sticks, triggers) undergo deadzone processing and optional response curve application as defined in global settings, ensuring fine-tuned control.
+
+2.  **Granular and Flexible Input-to-Action Mapping:**
+    *   Map any recognized generic gamepad input to a variety of targets and actions, configured per layer.
+    *   **Target OSC Channels:** Transmit OSC messages to external applications.
+        *   `Direct`: Scales a normalized analog input (0-1 for unipolar like triggers, -1 to 1 for bipolar like sticks/IMU) to a channel's defined min/max range in real-time.
+        *   `Rate`: Continuously adjusts a channel's value over time based on an analog input's intensity, direction, and the processing loop's `loop_delta_time`.
+        *   `Toggle`: Switches a channel's value between two states or based on discrete input presses.
+        *   `Step by Multiplier`: Increments/decrements a channel's value by a fixed amount per input trigger.
+        *   `Reset to Default`: Reverts a channel to its pre-configured default value.
+        *   A single gamepad input can be configured to simultaneously update *multiple* OSC channels.
+    *   **Target Internal Variables:** Modify the state (current value) of internal variables. The primary action is `Step by Multiplier on Trigger`, allowing inputs to increment/decrement a variable.
+    *   **Target Layer Switching:** Assign inputs to activate different mapping layers. This action can also be configured to send a custom OSC message upon layer change.
+
+3.  **Powerful Internal Variable System:**
+    *   Define and manage named internal variables, each with a configurable initial value, optional min/max clamping range, and persistence in `active_config.json`.
+    *   Utilize variables for:
+        *   Implementing custom logic: as counters, accumulators, toggles, or intermediate states for complex interactions.
+        *   Driving conditional OSC messaging: an input changes a variable, and the variable's new state (and its "OSC on Change" settings) dictates if/how an OSC message is sent.
+        *   Providing numerical feedback within the UI.
+    *   Updates to variable values (triggered by mapped inputs) are handled by `ChannelProcessingService`, which then instructs `ConfigService` to persist the new value.
+    *   Variables can be configured to automatically dispatch specific OSC messages (with defined address, data type, and content like current value or fixed string) whenever their value changes.
+
+4.  **Sophisticated Layered Control Schemes:**
+    *   Configure multiple, independent layers of input mappings (default layer, plus user-definable layers like 'A', 'B', 'C', 'D'), each with its own set of input-to-action rules.
+    *   Switch between layers seamlessly using designated gamepad inputs or global hotkeys. Layer configurations (name, mappings) are stored in `active_config.json`.
+    *   The `ChannelProcessingService` dynamically rebuilds its cache of continuous actions (like 'Direct' or 'Rate') when the active layer changes, ensuring correct real-time processing.
+
+5.  **Comprehensive and Interactive Real-Time Web UI:**
+    *   Visualizes live controller status (connections, types, battery) via `GlobalStatusView.js`.
+    *   Displays raw input states (buttons, axes, IMU) and allows detailed input mapping configuration on a per-layer basis through `InputMappingView.js`, which features dynamic gamepad diagrams and context-sensitive mapping panels (target type, name, action, parameters).
+    *   Facilitates CRUD (Create, Read, Update, Delete) operations for:
+        *   OSC channel definitions (name, address, type, range, default) via `ChannelManager.js`, which also shows live channel values and meters.
+        *   Internal variable definitions (name, initial value, range, OSC-on-change behavior) via `VariableManager.js`, which also displays live variable values.
+    *   Manages global application settings (OSC server, input processing parameters like deadzones/curves) and configuration preset management (load, save, delete named presets) through `SettingsView.js`.
+
+6.  **Instantaneous Live Configuration and Bidirectional State Synchronization:**
+    *   UI-driven changes (mappings, channel/variable definitions, settings) are immediately sent to the backend, where `WebService` calls the appropriate `ConfigService` methods.
+    *   `ConfigService` persists changes to `active_config.json` and uses its publish/subscribe mechanism to notify relevant backend services (like `InputService`, `OSCService`, `ChannelProcessingService`), which then adapt their behavior in real-time without needing an application restart.
+    *   Backend-originated events (controller status changes from `InputService`, live OSC channel value updates or raw input states from `ChannelProcessingService`, active layer changes) are broadcast via WebSocket (Flask-SocketIO) to all connected UI clients for immediate visual feedback and state consistency.
+
+Key Technical Features:
+*   **Event-Driven and Continuous Processing:** The backend uses an event-driven model for discrete inputs (button presses/releases) and a continuous processing loop for analog inputs requiring smooth rate-based or direct value changes.
+*   **Python Backend:** Handles core logic including controller input, state management, OSC message generation, and serving the web interface.
+*   **Flask & SocketIO:** The web server is built using Flask, with Flask-SocketIO enabling real-time bidirectional communication between the backend and frontend.
+*   **JavaScript Frontend:** The UI is built with HTML, CSS (Tailwind CSS), and vanilla JavaScript, organized into modules for managing different aspects of the interface and application state.
+*   **JSON Configuration:** All application settings, mappings, channel definitions, and variable definitions are stored in a central JSON file (`active_config.json`).
+*   **Centralized Input Name Definitions:** Raw-to-generic input name mappings are defined in a single JSON file (`app/definitions/input_mapping_definitions.json`), loaded by the backend at startup and served to the frontend via an API endpoint, ensuring consistency across the application.
+
+Backend Components (Python - located in `/app/`):
+=================================================
+
+1.  **`main.py` (Application Entry Point)**
+    *   **Responsibility:** Initializes and orchestrates all backend services.
+    *   **Details:**
+        *   Uses Flask-SocketIO in threading mode for reliability in one-file builds (no eventlet).
+        *   Sets up command-line argument parsing (`argparse`) for options like `--log-level`.
+        *   Configures application-wide logging using `app.utils.logging_config.setup_logging()`.
+        *   Initializes the Flask application (`app = Flask(...)`) and Flask-SocketIO (`socketio = SocketIO(app)`).
+        *   Instantiates all core services in a specific order to manage dependencies:
+            1.  `ConfigService`
+            2.  `InputService` (depends on `ConfigService`, `SocketIO`) which internally creates `XInputService` and `JSLService`.
+            3.  `OSCService` (depends on `ConfigService`)
+            4.  `ChannelProcessingService` (depends on `ConfigService`, `InputService`, `SocketIO`, `OSCService`)
+            5.  `WebService` (depends on `app`, `SocketIO`, `ConfigService`, `OSCService`, `InputService`)
+        *   Starts the `InputService` polling loop (`input_service.start_polling()`).
+        *   No greenlet keep-alive required in threading mode.
+        *   Starts the Flask-SocketIO web server (`socketio.run(app, ...)`), making the UI accessible.
+        *   Includes an `atexit` handler (`_main_py_atexit_diagnostics`) for diagnostic logging on shutdown.
+        *   Handles graceful shutdown by stopping the input polling and channel processing loops.
+
+2.  **`/services/config_service.py` (ConfigService)**
+    *   **Responsibility:** Manages the application's configuration lifecycle, including loading, accessing, modifying, and saving configuration data. It handles persistence to JSON files and provides a publish/subscribe mechanism for live updates to other services when the configuration changes.
+    *   **Details:**
+        *   **Constants:** Defines `CONFIG_DIR` (relative path to `configs/`), `ACTIVE_CONFIG_FILE` (`active_config.json`), and `DEFAULT_CONFIG_FILE` (`default_config.json`).
+        *   **Initialization (`__init__`):
+            *   Calls `_ensure_config_dir_exists()` to create the `configs/` directory if it doesn't exist.
+            *   Calls `_load_initial_config()` to load `active_config.json`. If this fails (file not found, invalid JSON), it attempts to load `default_config.json` via `_get_default_config()`.
+            *   If `default_config.json` also fails or is not present, it falls back to a hardcoded default configuration structure. This structure includes top-level keys such as: `osc_settings`, `web_settings`, `input_settings`, `internal_channels` (initially empty), `internal_variables` (initially empty), `layers` (with 'default', 'A', 'B', 'C', 'D' sub-layers, each with a name and empty `input_mappings`), `layer_keybinds`, and `layer_change_osc_actions`.
+            *   The loaded or default configuration is stored in `self.active_config`.
+            *   Initializes an empty list `self._config_change_subscribers` for the pub/sub pattern.
+        *   **Core File Operations:**
+            *   `_load_config_from_file(file_path)`: Reads and parses a JSON file from the given path. Returns `None` on error (file not found, JSON decode error).
+            *   `save_config_to_file(config_data, file_path)`: Writes the given `config_data` to the specified `file_path` as formatted JSON (indent=4).
+            *   `save_active_config()`: Saves the current content of `self.active_config` to `ACTIVE_CONFIG_FILE`. Critically, after a successful save, it calls `_notify_config_change_subscribers()` to inform all subscribed services of the change.
+        *   **Configuration Access and Modification:**
+            *   `get_config()`: Returns a deep copy of `self.active_config` object.
+            *   `update_config_section(section_key, section_data)`: Updates a top-level key (e.g., `"osc_settings"`, `"input_settings"`) in `self.active_config` with `section_data` and then calls `save_active_config()`.
+            *   Getter methods for specific sections: `get_osc_settings()`, `get_web_settings()`, `get_input_settings()`.
+        *   **CRUD Operations for Configuration Entities (Channels, Variables, Mappings):**
+            *   **Internal OSC Channels:**
+                *   `add_internal_channel(channel_properties)`: Adds a new channel. Requires `name` in properties.
+                *   `update_internal_channel(channel_name, properties_to_update)`: Updates existing channel properties. Prevents changing the channel `name` itself via this method.
+                *   `delete_internal_channel(channel_name)`: Deletes a channel. Also iterates through all input mappings in all layers and attempts to clear references to the deleted channel by effectively unmapping inputs targeting this channel.
+            *   **Internal Variables:**
+                *   `add_internal_variable(variable_name, variable_properties)`: Adds a new variable.
+                *   `update_internal_variable(variable_name, variable_data_to_update)`: Updates an existing variable.
+                *   `delete_internal_variable(variable_name)`: Deletes a variable. Iterates through input mappings to clear references, similar to channel deletion.
+            *   **Input Mappings:**
+                *   `update_input_mapping(layer_id, input_name, mapping_data)`: Updates or creates a mapping for a specific `input_name` within a given `layer_id`.
+                *   `clear_input_mapping(layer_id, input_name)`: Removes the mapping for a specific input in a layer by deleting the `input_name` key from the layer's `input_mappings`.
+                *   `clear_specific_channel_from_mapping(layer_id, input_name, channel_to_remove)`: Removes a specific OSC channel from an input's target list. If the channel was the only target, or the target list becomes empty, the entire input mapping entry for that input is deleted from the configuration.
+            *   All these CRUD operations call `save_active_config()` upon successful modification, which in turn notifies subscribers. Each CRUD method also returns a tuple: `(success_bool, message_str, updated_active_config_dict)`.
+        *   **Named Configuration Preset Management:**
+            *   `list_named_configs()`: Returns a list of filenames (excluding `.json` extension) from the `CONFIG_DIR`, filtering out `active_config.json` and `default_config.json` to provide a list of user-saved presets.
+            *   `save_as_named_config(name)`: Saves the current `self.active_config` to a new file named `<name>.json` in `CONFIG_DIR`.
+            *   `load_named_config(name)`: Loads the configuration from `<name>.json` into `self.active_config`. After loading, it immediately calls `save_active_config()`, which persists this newly loaded config as the `active_config.json` and notifies all subscribers.
+            *   `delete_named_config(name)`: Deletes the `<name>.json` file from `CONFIG_DIR`.
+        *   **Publish/Subscribe Mechanism for Live Updates:**
+            *   `subscribe_to_config_changes(callback)`: Allows other services (e.g., `ChannelProcessingService`, `InputService`, `OSCService`) to register a callback function.
+            *   `unsubscribe_from_config_changes(callback)`: Removes a previously registered callback.
+            *   `_notify_config_change_subscribers()`: This private method is called internally whenever the active configuration is successfully saved. It iterates through all registered `_config_change_subscribers` and executes each callback, enabling other services to react to configuration changes in real-time.
+
+3.  **Input Handling Subsystem (Refactored from monolithic InputService)**
+    *   The input handling is now modular, comprising a main `InputService` that orchestrates `XInputService` and `JSLService`.
+
+    **3.a. `/services/input_service.py` (InputService - Orchestrator)**
+        *   **Responsibility:** Core orchestrator for input handling. Manages listeners for input events, controller connections/disconnections, and battery status. It instantiates and coordinates `XInputService` and `JSLService` to handle platform-specific controller interactions.
+        *   **Details:**
+            *   **Singleton Pattern:** Implemented using a metaclass (`Singleton`) to ensure only one instance.
+            *   **Dependencies:** Initialized with `ConfigService` (to get `input_settings`) and an optional `SocketIO` instance (for direct emissions if needed, though primarily `WebService` handles this).
+            *   **Sub-Service Instantiation:** Creates and holds instances of `XInputService` and `JSLService`, passing itself (as `main_input_service_instance` for callbacks) and `config_service_instance` to them.
+            *   **Listener Interface:**
+                *   Provides methods (`register_input_listener`, `register_connect_listener`, `register_disconnect_listener`, `register_battery_listener`) for other services (like `ChannelProcessingService` and `WebService`) to subscribe to specific events.
+                *   Internal `_notify_..._listeners` methods are used to call these registered callbacks with standardized data (controller ID, input name, value, etc.). These methods are, in turn, called by callbacks from `XInputService` and `JSLService`.
+            *   **Main Polling Loop (`_polling_loop`):**
+                *   Runs in a separate thread (`self._polling_thread`).
+                *   On each tick, it calls `self.xinput_service.poll_xinput_events()` and `self.jsl_service.poll_jsl_devices()`.
+                *   Manages a scheduled JSL rescan using `self.jsl_rescan_timer` based on `jsl_rescan_interval_s` from `input_settings`. If `jsl_rescan_polling` is true, it calls `jsl_service.jsl_rescan_controllers_action()` when the timer expires.
+                *   Calculates sleep time based on `self.polling_rate_hz` from `input_settings`.
+            *   **Configuration Reloading (`reload_config(new_input_settings=None)`):**
+                *   Subscribes to `ConfigService` for configuration changes.
+                *   When called, it updates its internal copy of `self.input_settings`.
+                *   Crucially, it calls `reload_config` on its `XInputService` and `JSLService` instances, passing the updated settings to them so they can adjust their behavior (e.g., deadzones, polling details).
+            *   **Status Reporting (`get_connected_controllers_status()`):**
+                *   Aggregates status from `self.xinput_service.get_status()` and `self.jsl_service.get_status()`.
+                *   Formats this aggregated data into a list of dictionaries, each representing a connected controller with its ID, source ("xinput" or "jsl"), type string, battery info, and specific details (like XInput `user_index` or JSL `handle`). This is used by `WebService`.
+            *   **JSL Management Actions:**
+                *   `jsl_rescan_controllers_action()`: Calls the corresponding method on `self.jsl_service`.
+                *   `jsl_disconnect_all_controllers_action()`: Calls the corresponding method on `self.jsl_service`.
+            *   **Rumble:** Provides `trigger_rumble(controller_id, left_motor, right_motor, duration_ms)`. It determines if the `controller_id` belongs to XInput or JSL and calls the appropriate sub-service's rumble method (e.g., `self.xinput_service.trigger_xinput_rumble(...)`). (JSL rumble might be a future addition).
+            *   **Lifecycle Management:** `start_polling()` initiates the polling thread. `stop_polling()` signals the thread to terminate and waits for it to join. `_on_exit` handler ensures `stop_polling` is called on application shutdown.
+
+    **3.b. `/services/xinput_service.py` (XInputService - XInput Specialist)**
+        *   **Responsibility:** Handles all aspects of XInput controller management on Windows, including device detection, event polling, processing input values (deadzone, curve), battery monitoring, and rumble control.
+        *   **Details:**
+            *   Not a Singleton; created and managed by the main `InputService`.
+            *   **Dependencies:** Takes the `main_input_service_instance` (for callbacks) and `config_service_instance` in its constructor.
+            *   **XInput Availability:** Conditionally imports `XInput-Python`. If unavailable, uses a `_DummyXInput` class and sets `XINPUT_AVAILABLE = False`.
+            *   **State Management:** Maintains its own internal states for connected XInput controllers (up to 4): `connected`, `button_states`, `trigger_states`, `thumb_states`, `battery_states`, `last_battery_check_time`.
+            *   **Polling and Event Processing (`poll_xinput_events()`):**
+                *   This method is called by the main `InputService`'s polling loop.
+                *   Uses `XInput.get_events()` to retrieve a list of XInput events (connections, disconnections, button presses/releases, trigger movements, stick movements).
+                *   For each event:
+                    *   On `EVENT_CONNECTED`: Updates its internal state, sets XInput deadzones using `XInput.set_deadzone()` based on `self.deadzone_config`, performs an initial battery check, and notifies the main `InputService` via `self.main_input_service._notify_connect_listeners()`.
+                    *   On `EVENT_DISCONNECTED`: Updates state and notifies `InputService` via `self.main_input_service._notify_disconnect_listeners()`.
+                    *   On `EVENT_BUTTON_PRESSED`/`RELEASED`: Updates `button_states` and notifies `InputService` via `self.main_input_service._notify_input_listeners()` with the raw XInput button name (e.g., "A", "DPAD_UP") and value (True/False).
+                    *   On `EVENT_TRIGGER_MOVED`: Updates `trigger_states` and notifies `InputService` with raw trigger name ("LEFT_TRIGGER", "RIGHT_TRIGGER") and normalized value (0.0-1.0).
+                    *   On `EVENT_STICK_MOVED`: Applies the stick curve using `apply_stick_curve()` to the raw stick values, updates `thumb_states`, and notifies `InputService` with raw stick axis names (e.g., "LEFT_STICK_X") and processed value (-1.0-1.0).
+                *   Also performs periodic battery checks for connected controllers via `_check_battery_status_for_all()`.
+            *   **Battery Monitoring (`_check_battery_status_for_all`, `_get_and_notify_battery_status`):**
+                *   Periodically called by `poll_xinput_events()`.
+                *   Uses `XInput.get_battery_information()`. If battery status changes, notifies the main `InputService` via `self.main_input_service._notify_battery_listeners()`.
+            *   **Deadzone and Curve Configuration:**
+                *   Stores `deadzone_config` (a `DeadzoneConfig` dataclass instance) populated from `ConfigService` (via `InputService`).
+                *   `apply_stick_curve(value, exponent)`: Applies a power curve to stick input values.
+            *   **Rumble (`trigger_xinput_rumble`, `_execute_xinput_rumble_sequence`):**
+                *   Activates XInput controller vibration. `_execute_xinput_rumble_sequence` runs in a separate thread for timed pulses.
+            *   **Configuration Reloading (`reload_config(new_input_settings)`):**
+                *   Called by the main `InputService` when global input settings change.
+                *   Updates its internal `self.deadzone_config` and `self.battery_check_interval_s`.
+                *   Re-applies XInput deadzones for all currently connected XInput controllers using `XInput.set_deadzone()`.
+            *   **Status Reporting (`get_status()`):**
+                *   Returns a list of dictionaries, each representing a connected XInput controller with its `user_index`, ID string (e.g., "xinput_0"), type string, and battery status. This is consumed by the main `InputService`.
+
+    **3.c. `/services/jsl_service.py` (JSLService - JoyShockLibrary Specialist)**
+        *   **Responsibility:** Handles all integration with JoyShockLibrary (JSL), including loading the DLL, managing JSL device connections via callbacks, polling JSL device states (buttons, axes, IMU), normalizing JSL inputs, and reporting them to the main `InputService`.
+        *   **Details:**
+            *   Not a Singleton; created and managed by the main `InputService`.
+            *   **Dependencies:** Takes `main_input_service_instance` (for callbacks) and `config_service_instance` in its constructor.
+            *   **JSL DLL Loading (`_load_jsl()`):**
+                *   Attempts to load `JoyShockLibrary.dll` (expected in `app/lib/`) using `ctypes`. Sets `self.jsl_available = False` if loading fails.
+                *   Defines C-compatible structures (`JOY_SHOCK_STATE`, `IMU_STATE`, etc.) and C callback function types.
+                *   Initializes JSL (`jsl.JslInit()`) if available.
+            *   **JSL Callbacks (`_on_jsl_connect_c`, `_on_jsl_disconnect_c`):**
+                *   These are C-style callbacks registered with JSL.
+                *   `_on_jsl_connect_c(handle, type_enum)`: Called by a JSL thread. Records the device in `self.jsl_devices` (mapping JSL handle to device info). Notifies the main `InputService` via `self.main_input_service._notify_connect_listeners()`. Emits `jsl_device_update` via `main_input_service.socketio`.
+                *   `_on_jsl_disconnect_c(handle, timed_out)`: Called by a JSL C thread. Queues the disconnect event onto `self.jsl_disconnect_queue` for thread-safe processing in `poll_jsl_devices()`.
+            *   **State Management:**
+                *   `jsl_devices`: Dictionary mapping JSL handle to device information.
+                *   `previous_jsl_states`: Dictionary mapping JSL handle to the last known `JOY_SHOCK_STATE` and `IMU_STATE` for change detection.
+                *   `jsl_disconnect_queue`: A thread-safe `queue.Queue` for disconnect events.
+            *   **Polling and Event Processing (`poll_jsl_devices()`):**
+                *   Called by the main `InputService`'s polling loop.
+                *   First, processes any pending disconnect events from `self.jsl_disconnect_queue` by calling `_handle_jsl_disconnect_logic()`, which updates internal state and notifies the main `InputService`.
+                *   For each connected JSL device in `self.jsl_devices`:
+                    *   Calls `jsl.JslGetSimpleState()` and `jsl.JslGetIMUState()`.
+                    *   Compares current states with `self.previous_jsl_states` to detect changes.
+                    *   If a change is detected:
+                        *   **Input Normalization:** Converts JSL button masks to names using `jsl_button_mask_to_name_map` (e.g., `JSMASK_S` -> "S"). Standardizes analog input names using `JSL_STANDARD_INPUT_NAMES` (e.g., JSL's `stickLX` becomes "LEFT_STICK_X").
+                        *   Notifies the main `InputService` of each changed input via `self.main_input_service._notify_input_listeners()`, providing the normalized input name and its value.
+                    *   Updates `self.previous_jsl_states`.
+            *   **JSL Management Actions:**
+                *   `jsl_rescan_controllers_action()`: Calls `jsl.JslScanAndConnectNewDevices()`. Emits `jsl_scan_complete` via `main_input_service.socketio`.
+                *   `_disconnect_single_jsl_controller(internal_jsl_id_str)`: Disconnects a specific JSL device by its handle.
+                *   `jsl_disconnect_all_controllers_action()`: Calls `jsl.JslDisconnectAndDisposeAll()`. Emits `jsl_disconnect_all_status` via `main_input_service.socketio`.
+            *   **Configuration Reloading (`reload_config(new_input_settings)`):**
+                *   Called by the main `InputService`. Updates its JSL-related settings from `new_input_settings`.
+            *   **Status Reporting (`get_status()`):**
+                *   Returns a list of dictionaries, each representing a connected JSL device with its handle, unique ID string (e.g., "jsl_0_DS4_..."), type string, and battery status (usually "N/A" for JSL unless specific support is added). Consumed by main `InputService`.
+            *   **Resource Cleanup (`disconnect_all_and_dispose()`):** Ensures `JslDisconnectAndDisposeAll()` is called, typically on application exit.
+
+4.  **`/services/channel_processing_service.py` (ChannelProcessingService)**
+    *   **Responsibility:** This is the core logic engine of the application. It receives processed input events from `InputService`, and based on the user's mappings in the currently active layer of the configuration (from `ConfigService`), it translates these inputs into actions. These actions can modify OSC channel values (and subsequently trigger OSC messages via `OSCService`) or update internal variables. It also handles live updates from `ConfigService` and manages a continuous processing loop for time-sensitive actions.
+    *   **Details:**
+        *   **Dependencies:** Initialized with instances of `ConfigService`, `InputService`, `SocketIO` (for frontend updates), and `OSCService`.
+        *   **State Management:**
+            *   `channel_values`: A dictionary storing the current numerical or string values of all defined OSC channels. Access is protected by `self.channel_values_lock`.
+            *   Note: metadata is cached on-demand per layer; no persistent `channel_values_metadata` field.
+            *   `active_layer_id`: A string indicating the currently active mapping layer (e.g., "A", "B"). Default is 'A'.
+            *   `action_details_for_continuous_processing`: A dictionary caching the configuration for mappings that require continuous updates (e.g., "direct", "rate" actions). This cache is specific to the `active_layer_id` and is rebuilt by `_update_action_details_for_continuous_processing()` during initialization, when the layer changes, or config reloads. Access is protected by `self.continuous_actions_lock`.
+            *   `raw_controller_states`: Stores the most recent raw value for each input from each connected controller, using the `raw_input_name` as part of the key. (Maintained for potential direct use or detailed logging, though primary processing uses generic names).
+            *   `merged_input_states`: A dictionary where keys are `generic_input_name` strings (e.g., "A", "LEFT_STICK_X") and values are their current, processed state (e.g., float value). `_update_merged_states()` is responsible for populating this, typically taking the latest value if multiple physical inputs map to the same generic name. This dictionary serves as the source of truth for input values used by the continuous processing loop.
+        *   **Input Event Handling (`InputService` Subscriptions):
+            *   `handle_input_update(controller_id, generic_input_name, value)`: This is the primary handler for input events from `InputService`. `InputService` now provides the already determined `generic_input_name`.
+                1.  Updates `self.raw_controller_states` (using `generic_input_name` as part of its key structure if needed, or by looking up the original raw name if `InputService` provides it alongside the generic one).
+                2.  Calls `_update_merged_states()` to update `self.merged_input_states` using the provided `generic_input_name` and `value`.
+                3.  Emits `raw_inputs_update` via `SocketIO` to the frontend (throttled by `raw_emit_interval`).
+                4.  Retrieves the mappings for the `active_layer_id` from `ConfigService`.
+                5.  If a mapping exists for the `generic_input_name` and its action is **not** one handled by the continuous loop (i.e., it's a trigger-based or discrete action like "toggle", "reset_channel_on_trigger", "step_by_multiplier_on_trigger", "cycle_value_on_trigger", "activate_layer"), it then calls the appropriate processing method:
+                    *   `process_channel_mapping()` if `target_type` is `osc_channel`.
+                    *   Variable changes are applied via `ConfigService.set_internal_variable_value` when `target_type` is `internal_variable`.
+                    *   `set_active_layer()` if `target_type` is `layer_switch`.
+            *   `handle_controller_connect(controller_id, controller_type_str, device_details)`: Logs connection and ensures state is set up for the controller.
+            *   `handle_controller_disconnect(controller_id)`: Logs disconnection and clears state for the controller.
+        *   **Input Name Standardization Info:**
+            *   `RAW_TO_GENERIC_INPUT_MAP`: This dictionary is loaded from `app/definitions/input_mapping_definitions.json` at startup. While the primary raw-to-generic translation now occurs within `XInputService` and `JSLService`, `ChannelProcessingService` still loads this map. It's used for defining `BIPOLAR_ANALOG_INPUT_IDS` and `UNIPOLAR_ANALOG_INPUT_IDS` (sets of generic input names used by the "direct" action to infer an input's natural range for normalization).
+            *   Mappings in `active_config.json` always use these `generic_input_name` strings.
+        *   **Continuous Processing Loop (`_continuous_processing_loop`):
+            *   Runs in a separate thread (`self.processing_loop_thread`) at a configurable `self.processing_rate_hz` (e.g., 60Hz). Includes logic to cap excessive `loop_delta_time` if the application was suspended.
+            *   On each tick, it calculates `loop_delta_time`.
+            *   Iterates through the actions cached in `self.action_details_for_continuous_processing` (which are specific to the current `active_layer_id`). For each such mapping:
+                1.  Retrieves the current value of the mapped `generic_input_name` from `self.merged_input_states`.
+                2.  If the action is **"rate"** (for OSC channels):
+                    *   Calculates the change in channel value based on the input value, `rate_multiplier` param, and `loop_delta_time`.
+                    *   Updates the target channel's value in `self.channel_values` (clamping to channel's min/max).
+                    *   Emits `channel_value_update` via `SocketIO`.
+                    *   Queues an OSC message via `self.osc_service.handle_value_update()`.
+                3.  If the action is **"direct"** (for OSC channels):
+                    *   Normalizes the input value: 0-1 for buttons and recognized unipolar analog inputs (using `UNIPOLAR_ANALOG_INPUT_IDS`); -1 to 1 for recognized bipolar analog inputs (using `BIPOLAR_ANALOG_INPUT_IDS`). This step is key to abstracting varied physical input ranges to a consistent normalized form.
+                    *   If `params.invert` is true, it effectively swaps the channel's configured min/max for scaling purposes.
+                    *   Scales the normalized input value to the target channel's min/max range.
+                    *   Updates the target channel's value, emits `channel_value_update`, and queues an OSC message.
+            *   At the end of each loop tick, calls `self.osc_service.send_bundled_messages()` to dispatch any OSC messages queued during that tick by any action (continuous or discrete).
+        *   **Discrete Action Processing (Trigger-based):
+            *   `process_channel_mapping(channel_name, action, input_value, params, delta_time)`: Handles direct modifications to OSC channels for actions not covered by the continuous loop.
+                *   `"toggle"`: Alternates the channel value between its configured `min_value` and `max_value`.
+                *   `"reset_channel_on_trigger"`: Sets the channel to its configured `default` value.
+                *   `"step_by_multiplier_on_trigger"`: Adds/subtracts `params.multiplier` to/from the channel value.
+                *   `"cycle_value_on_trigger"`: Cycles through a list of values defined in `params.values`.
+                *   All these update `self.channel_values`, emit `channel_value_update` via `SocketIO`, and queue an OSC message.
+            *   Variable changes are applied via `ConfigService` helpers (`get_internal_variable_value`/`set_internal_variable_value`) and `variable_value_updated` is emitted.
+        *   **Layer Management (`set_active_layer(new_layer_id, ...)`):
+            *   Changes `self.active_layer_id`.
+            *   Crucially, calls `_update_action_details_for_continuous_processing()` to rebuild the cache of actions for the new layer, ensuring the continuous loop processes the correct mappings.
+            *   If the mapping that triggered the layer switch has an `on_change_osc` parameter, it sends the specified custom OSC message.
+        *   **Configuration Reloading (`_handle_config_updated` and `_initialize_channel_states`):
+            *   Subscribes to `ConfigService` for notifications of configuration changes.
+            *   `_handle_config_updated()`: When the configuration is updated, this method calls `_initialize_channel_states()` and `_update_action_details_for_continuous_processing()`.
+            *   `_initialize_channel_states()`: Preserves existing `self.channel_values` where possible and clamps/snaps to new min/max on config updates.
+        *   **Lifecycle:** `_start_processing_loop()` starts the continuous processing thread. `stop_processing_loop()` stops it. This is managed by `main.py`.
+
+5.  **`/services/osc_service.py` (OSCService)**
+    *   **Responsibility:** Constructs OSC (Open Sound Control) messages based on updates from `ChannelProcessingService` or direct requests, queues them, and sends them as OSC bundles to the target application defined in the configuration.
+    *   **Details:**
+        *   **Dependencies:** Initialized with `ConfigService` (to get OSC server IP and port). It can also accept a `socketio_instance` (though not actively used by `OSCService` in current implementation) and has a `set_channel_processing_service` method for potential future two-way communication, though primarily `ChannelProcessingService` calls methods on `OSCService`.
+        *   **OSC Client (`self.osc_client`):
+            *   `_setup_osc_client()`: Initializes `self.osc_client` as a `pythonosc.udp_client.SimpleUDPClient` using the IP address and port from `ConfigService.get_osc_settings()`. Handles potential errors during client creation, leaving `self.osc_client` as `None` if it fails.
+            *   This setup is called during `__init__` and also by `reload_config()`.
+        *   **Configuration Reloading (`reload_config()`):
+            *   This method is designed to be called when the application's configuration changes (typically via `ConfigService`'s pub/sub).
+            *   It calls `_setup_osc_client()` to re-initialize the `SimpleUDPClient` in case the target IP or port has changed.
+            *   It also clears the internal `self.message_queue` to prevent sending stale messages with potentially outdated client settings.
+        *   **Message Building (`_build_osc_message(address, value, type_hint=None)`):
+            *   Takes an OSC `address`, a `value`, and an optional `type_hint` string (e.g., "float", "int", "string", "bool").
+            *   Creates a `pythonosc.osc_message_builder.OscMessageBuilder` instance.
+            *   **Type Handling:** Adds the `value` to the message with an appropriate OSC type tag:
+                *   If `type_hint` is provided ('int', 'float', 'string', or 'bool' which converts to int 0/1), it's used directly.
+                *   If no `type_hint`, it infers from Python types: `bool` (to int 0/1), `int`, `float`, `str`.
+                *   As a final fallback for unhandled types, it first tries to coerce `value` to `float`. If that fails, it coerces to `str`.
+            *   Returns the constructed `OscMessage` object.
+        *   **Message Queuing:**
+            *   `self.message_queue`: An internal list that stores `OscMessage` objects waiting to be sent.
+            *   `handle_value_update(update_type, name, value)`: This is the main method called by `ChannelProcessingService`.
+                *   `update_type` can be `'channel'` or `'variable'`.
+                *   Retrieves OSC address and type hint from the configuration based on `update_type` and `name`.
+                *   For variables with `on_change_osc` enabled: if `value_content` is specified in the config and is *not an empty string*, that fixed string is used as the OSC value. Otherwise, the variable's runtime `value` is used. If `value_content` is used and no `value_type` is specified in the variable's OSC config, the `type_hint` defaults to 'string'.
+                *   Calls `_build_osc_message()` and appends the returned message to `self.message_queue` if an address is found and the client is ready.
+            *   `send_custom_osc_message(address, value, value_type_hint=None)`: Allows other parts of the system (e.g., `ChannelProcessingService` for layer change OSC notifications) to directly queue a custom OSC message.
+        *   **Bundled Message Sending (`send_bundled_messages()`):
+            *   This method is typically called by `ChannelProcessingService` at the end of each of its processing loop ticks.
+            *   If `self.osc_client` is not initialized (e.g., setup failed), it clears `self.message_queue` and returns, preventing message buildup.
+            *   If the queue is not empty and the client is ready:
+                1.  Creates an `pythonosc.osc_bundle_builder.OscBundleBuilder` with an immediate timestamp (`osc_bundle_builder.IMMEDIATELY`).
+                2.  Adds all `OscMessage` objects from `self.message_queue` to this bundle.
+                3.  Sends the complete bundle using `self.osc_client.send(bundle)`.
+            *   Handles potential exceptions during sending.
+            *   Finally, it always clears `self.message_queue` after attempting to send (or if client was unavailable).
+
+6.  **`/services/web_service.py` (WebService)**
+    *   **Responsibility:** Serves the frontend web application (HTML, CSS, JS) and manages all real-time, bidirectional communication with connected clients using Flask and Flask-SocketIO. It acts as the primary interface between the frontend UI and the backend services (`ConfigService`, `InputService`, `OSCService`).
+    *   **Details:**
+        *   **Dependencies:** Initialized with the Flask `app_instance`, `socketio_instance`, and instances of `ConfigService`, `OSCService`, and `InputService`.
+        *   **Flask HTTP Routes (`register_routes()`):
+            *   `/`: Serves the main `index.html` file for the single-page application.
+            *   `/health`: Provides a simple health check endpoint returning "OK".
+            *   `/api/input-mapping-definitions`: Serves the raw-to-generic input name mapping definitions from `app/definitions/input_mapping_definitions.json`.
+        *   **SocketIO Event Handlers (`register_socketio_events()`):** This is where most of the frontend-backend interaction logic resides. Key event handlers include:
+            *   **Connection Lifecycle:**
+                *   `connect`: Triggered when a new client connects. Logs the connection and calls `_emit_active_config_update(target_sid=request.sid)` to send the complete current application configuration to the newly connected client.
+                *   `disconnect`: Logs when a client disconnects.
+            *   **Configuration Management (interacting with `ConfigService`):
+                *   `get_active_config`: Client requests the full current configuration; `_emit_active_config_update` sends it back to the requester.
+                *   `list_configs`: Client requests the list of saved named configuration presets; retrieves from `ConfigService` and sends back.
+                *   `load_named_config` (data: `{name}`): Instructs `ConfigService` to load a named preset. If successful, calls `_emit_active_config_update()` to broadcast the new full configuration to *all* clients, and sends an operation status message to the requester.
+                *   `save_active_config_as` (data: `{name}`): Instructs `ConfigService` to save the current active configuration under a new preset name. Sends status to requester and broadcasts the updated list of configs to all clients.
+                *   `delete_named_config` (data: `{name}`): Instructs `ConfigService` to delete a preset. Sends status and broadcasts updated config list.
+                *   `update_osc_settings` (data: `{...osc_settings}`): Validates incoming `data`. Updates the `osc_settings` section in `ConfigService`. If successful, broadcasts the full updated config, sends status to requester, and calls `self.osc_service.reload_config()`.
+                *   `update_input_settings` (data: `{...input_settings}`): Validates incoming `data`. Updates `input_settings` in `ConfigService`. If successful, broadcasts full updated config, sends status, and calls `self.input_service.reload_config(data)`.
+            *   **Internal Channel & Variable CRUD (interacting with `ConfigService`):
+                *   `add_variable`, `update_variable`, `delete_variable`: Each takes data from the client, calls the corresponding method in `ConfigService`. On success, `WebService` uses the returned `new_config_dict` to broadcast the full updated config to all clients and sends an operation status to the requester.
+                *   `add_channel`, `update_channel`, `delete_channel`: Similar logic to variable CRUD.
+            *   **Input Mapping Management (interacting with `ConfigService`):
+                *   `update_input_mapping` (data: `{layer_id, input_id, mapping_data, save_to_all_layers}`): Calls `ConfigService.update_input_mapping()`. Broadcasts the full updated config on success.
+                *   `clear_input_mapping` (data: `{layer_id, input_id, save_to_all_layers}`): Calls `ConfigService.clear_input_mapping()`. Broadcasts the full updated config on success.
+                *   `clear_specific_mapping` (data: `{layer_id, input_name, channel_name, currently_editing_channel}`): Calls `ConfigService.clear_specific_channel_from_mapping()`. If successful, broadcasts the full updated configuration to all clients and sends an operation status to the requester. This is used by the 'X' clear buttons in the channel edit panel.
+            *   **JSL Controller Actions (interacting with `InputService`):
+                *   `jsl_rescan_controllers`: Triggers `self.input_service.jsl_rescan_controllers_action()` (which internally calls the method on `JSLService`).
+                *   `jsl_disconnect_all_controllers`: Triggers `self.input_service.jsl_disconnect_all_controllers_action()` (delegated to `JSLService`).
+            *   **General Status/Debug:**
+                *   `get_controller_status`: Client requests current controller statuses. `WebService` calls `get_current_controller_status_payload()` (which internally calls `self.input_service.get_connected_controllers_status()` and formats the data), and emits a `controller_status_update` event back to the specific requester.
+                *   Note: legacy echo handlers ('client_message', 'server_response') are removed from production code.
+        *   **Broadcasting Updates from Backend Services to Frontend:**
+            *   **Via `InputService` Listeners (`_register_input_service_listeners()`):**
+                *   `WebService` registers callback methods (`handle_controller_connect`, `handle_controller_disconnect`, `handle_battery_update`) with `InputService`.
+                *   When `InputService` detects these events, it calls the registered `WebService` handlers.
+                *   These handlers, in turn, all call `_broadcast_controller_status_update()`.
+                *   `_broadcast_controller_status_update(target_sid=None)`: This method calls `get_current_controller_status_payload()` to fetch and format the complete current status of all controllers (XInput and JSL devices with their properties). It then emits a `controller_status_update` SocketIO event containing this payload to all connected clients (or a specific client if `target_sid` is provided). This is the primary mechanism for live updates to the `GlobalStatusView.js` on the frontend.
+            *   **Via Direct Emission from other Services (e.g., `ChannelProcessingService`):** It's important to note that `ChannelProcessingService`, being initialized with the same `socketio` instance, directly emits certain high-frequency or state-change events to all clients. These include:
+                *   `channel_value_update` (when an OSC channel's value changes).
+                *   `variable_value_updated` (when an internal variable's value changes).
+                *   `raw_inputs_update` (periodically, with current raw input states for visualization).
+                `WebService` does not need to explicitly proxy these as they are sent directly from the source service.
+        *   **Helper Methods:**
+            *   `_emit_active_config_update(target_sid=None)`: A crucial utility to send the entire current `active_config` (obtained from `ConfigService.get_config()`) to a specific client or broadcast it to all. This is a key pattern for ensuring config consistency.
+            *   `get_current_controller_status_payload()`: Constructs the detailed payload (with `xinput_slots` and `jsl_devices` keys) for the `controller_status_update` event by querying `InputService.get_connected_controllers_status()` and formatting the data as expected by the frontend.
+
+7.  **`/utils/` (Backend Utilities)**
+    *   **`logging_config.py`**: 
+        *   **Responsibility:** Provides a centralized function (`setup_logging`) to configure the Python standard `logging` module for the entire application, primarily by setting up the root logger.
+        *   **Details:**
+            *   Defines module-level constants: `DEFAULT_LOG_LEVEL` (e.g., `logging.INFO`) and `LOG_FORMAT` (a string defining the log message structure, including timestamp, logger name, level, module, line number, and message).
+            *   The `setup_logging(level=DEFAULT_LOG_LEVEL)` function:
+                1.  Retrieves the root logger (`logging.getLogger()`).
+                2.  Sets the root logger's effective level (e.g., INFO, DEBUG).
+                3.  **Handler Management:** It first checks if the root logger already has handlers. If so, it iterates through them, removes each one, and calls `handler.close()` to ensure a clean setup and prevent duplicate log messages if `setup_logging` were to be called multiple times (though it's typically called once at application startup in `main.py`).
+                4.  **Console Handler:** Creates a `logging.StreamHandler` that directs log output to `sys.stdout` (the console).
+                5.  Sets the console handler's level to the provided `level`.
+                6.  **Formatter:** Creates a `logging.Formatter` using the predefined `LOG_FORMAT`.
+                7.  Applies this formatter to the console handler.
+                8.  Adds the configured console handler to the root logger.
+            *   Includes commented-out example code demonstrating how a `logging.FileHandler` could be added to write logs to a file (e.g., `app.log`).
+            *   The script includes a `if __name__ == '__main__':` block which, when `logging_config.py` is run directly, calls `setup_logging` with `logging.DEBUG` and then emits logs at various levels to test the configuration.
+    *   **`Singleton.py`**: 
+        *   **Responsibility:** Provides a generic `Singleton` metaclass.
+        *   **Details:**
+            *   This metaclass can be used by other classes to ensure that only one instance of that class is ever created throughout the application's lifecycle.
+            *   It works by maintaining a class-level dictionary `_instances` that stores a single instance for each class that uses `Singleton` as its metaclass.
+            *   The `__call__` method of the metaclass is overridden. When an attempt is made to instantiate a class (e.g., `MyServiceClass()`) that uses this metaclass:
+                1.  It checks if an instance of `MyServiceClass` already exists in `_instances`.
+                2.  If not, it proceeds to create a new instance using `super().__call__(*args, **kwargs)` (which correctly calls the `__init__` method of `MyServiceClass`) and stores this new instance in `_instances` mapped to `MyServiceClass`.
+                3.  If an instance already exists, or after creating a new one, it returns the (single) stored instance from `_instances`.
+            *   This pattern is used by `InputService` to ensure there's only one point of control for hardware input.
+            *   The file includes commented-out example usage within an `if __name__ == '__main__':` block for demonstration and testing purposes.
+    *   **`helpers.py`**: 
+        *   **Responsibility & Details:** This file is intended as a placeholder for general-purpose, stateless utility functions that might be used across various backend modules. Currently, it is minimal and only contains a `print("helpers.py loaded")` statement, confirming its placeholder status.
+
+8.  **`/models/` (Data Models)**
+    *   **`config_model.py`**: Currently minimal. Intended for defining Python classes or Pydantic models to represent the structure of `active_config.json` for validation or easier typed access, but this is not extensively used yet.
+
+9.  **`/lib/` (Shared Libraries)**
+    *   This directory is where `InputService` expects to find `JoyShockLibrary.dll`.
+
+Frontend Components (JavaScript - located in `/static/js/`):
+============================================================
+
+1.  **`mainApp.js` (Frontend Entry Point)**
+    *   **Responsibility:** Initializes all other frontend JavaScript modules in the correct order after the DOM is fully loaded.
+    *   **Details:**
+        *   Waits for the `DOMContentLoaded` event before executing any initialization logic.
+        *   Ensures the global `App` namespace (`window.App`) is created.
+        *   Initializes core frontend modules by calling their respective `init()` methods in a specific sequence:
+            1.  `App.SocketManager.init()`
+            2.  `App.AppLogger.initialize()` (if available)
+            3.  `App.ConfigManager.init()`
+            4.  `App.UIManager.init()`
+            5.  `App.SettingsView.init()`
+            6.  `App.GlobalStatusView.init()`
+            7.  `App.InputMappingView.init()`
+            8.  `App.ChannelManager.init()`
+            9.  `App.VariableManager.init()`
+        *   Includes example/test event subscriptions to `ConfigManager` for debugging only; echo events are no longer used.
+        *   The primary role is orchestration of module startup; it does not handle ongoing application logic itself.
+
+2.  **`socketManager.js` (SocketManager)**
+    *   **Responsibility:** Manages the Socket.IO connection to the backend and provides a centralized interface for sending and receiving WebSocket messages.
+    *   **Details:**
+        *   Initializes the Socket.IO client (`io()`) with configured reconnection attempts (5) and delay (3000ms).
+        *   Maintains an internal `isConnectedStatus` flag and an `onConnectCallbacks` queue.
+        *   Features an `onConnected(callback)` method: If the socket is already connected, the callback is executed immediately. Otherwise, the callback is added to a queue and processed once the `connect` event is received.
+        *   Handles standard Socket.IO events: `connect` (sets `isConnectedStatus` to true, processes `onConnectCallbacks`, and notifies specific 'connect' handlers), `disconnect` (sets `isConnectedStatus` to false and notifies 'disconnect' handlers), and `connect_error` (notifies 'connect_error' handlers).
+        *   Uses a central `socket.onAny((eventName, ...args) => { ... })` handler to intercept all incoming messages. This handler:
+            *   Logs non-noisy incoming events (events like `raw_inputs_update`, `channel_values_update` are considered noisy and not logged by this specific `onAny` handler to keep the console cleaner).
+            *   Dispatches the event and its arguments to specific handlers registered via the `on()` method. It excludes dispatching for `connect`, `disconnect`, and `connect_error` from this central dispatcher as they have dedicated handling.
+        *   Provides a public API:
+            *   `init()`: Initializes the socket connection if not already done.
+            *   `onConnected(callback)`: Registers a callback to be executed when the socket is connected.
+            *   `emit(eventName, data)`: Sends a message to the server; logs an error if the socket is not connected.
+            *   `on(eventName, callback)`: Allows other modules to subscribe to specific server events. Callbacks are stored in an internal `eventHandlers` object. The method returns an unsubscribe function, allowing listeners to be removed.
+            *   `getSocketId()`: Returns the current socket ID, or null.
+            *   `isConnected()`: Returns a boolean indicating if the socket is currently connected.
+
+3.  **`configManager.js` (ConfigManager)**
+    *   **Responsibility:** Acts as the client-side single source of truth for the application configuration and key UI states (active layer, selected input). Manages updates to this state and notifies subscribed modules.
+    *   **Details:**
+        *   Internally stores a deep clone of the main configuration object (`_config`), the `_activeUiLayerId` (defaulting to 'A'), and the `_selectedInput` (initially null).
+        *   The `init()` method registers `_initializeSubscriptions()` to be called via `App.SocketManager.onConnected()`. This ensures that subscriptions to server events and the initial config request only happen once the WebSocket connection is established.
+        *   `_initializeSubscriptions()`:
+            *   Subscribes to `active_config_updated` messages from `SocketManager`. When this event is received:
+                *   It updates its internal `_config` with a deep clone of the new configuration.
+                *   If it's the first time config is loaded (i.e., `_config` was previously empty), it notifies subscribers via the `configLoaded` event.
+                *   Otherwise, it notifies subscribers via the `configUpdated` event, providing both the new and old config (if they differ).
+            *   Emits a `get_active_config` message via `SocketManager` to request the initial full configuration from the server.
+        *   Implements a publish/subscribe system:
+            *   `_subscribers`: An internal object to store arrays of callback functions for different event types.
+            *   `_notify(eventType, data)`: A private method to call all registered callbacks for a given event type.
+            *   `subscribe(eventType, callback)`: Public method for other modules to register a callback for specific events (e.g., `configLoaded`, `configUpdated`, `activeUiLayerChanged`, `selectedInputChanged`). Returns an unsubscribe function.
+        *   Provides getter methods that return deep clones to protect internal state:
+            *   `getConfig()`: Returns the entire configuration object.
+            *   `getOscSettings()`, `getInputSettings()`, `getLayersConfig()`: Return specific top-level sections of the config.
+            *   `getMappingForInput(layerId, inputId)`: Retrieves a specific input mapping from a given layer.
+            *   `getActiveUiLayerId()`: Returns the currently active UI layer ID.
+            *   `getSelectedInput()`: Returns the name of the currently selected input for mapping.
+            *   `isConfigLoaded()`: Returns true if the configuration has been loaded.
+        *   Provides setter methods that trigger notifications to subscribers:
+            *   `setActiveUiLayerId(layerId)`: Updates `_activeUiLayerId` and notifies via `activeUiLayerChanged` if the ID has changed. Includes basic validation for layer IDs.
+            *   `setSelectedInput(inputName)`: Updates `_selectedInput` and notifies via `selectedInputChanged` if the name has changed.
+        *   `updateInputMapping(layerId, inputId, mappingData, saveToAllLayers)`: Emits an `update_input_mapping` event to the server via `SocketManager`. It currently relies on the server broadcasting back an `active_config_updated` event to refresh its local `_config` and notify its own subscribers; no optimistic local update is performed within `ConfigManager` itself. Uses deep cloning for data integrity.
+
+4.  **`uiManager.js` (UIManager)**
+    *   **Responsibility:** Manages main UI elements, particularly tab navigation and coordinating UI updates upon tab changes.
+    *   **Details:**
+        *   **Initialization (`init`):**
+            *   Queries and caches all tab buttons (elements with class `.tab-btn` within `#tabs-navigation`) and tab content panes (elements with class `.tab-pane` within `#tab-content-area`).
+            *   Adds a click event listener to each tab button, which calls `_handleTabClick`.
+            *   Determines an initial active tab: either one already possessing an `active-tab` class or, by default, the first tab button found. It then programmatically clicks this button to ensure the correct initial tab is displayed and any associated logic (like setting active layer in `ConfigManager`) is triggered.
+            *   Subscribes to the `activeUiLayerChanged` event from `App.ConfigManager`. If the active UI layer is changed by a mechanism other than a direct tab click (e.g., by an input mapping that switches layers), this subscription allows `UIManager` to find the corresponding layer tab (e.g., `layer-a-tab` for layer 'A') and simulate a click on it. This keeps the visual tab selection synchronized with the actual active UI layer managed by `ConfigManager`.
+        *   **Tab Switching (`showTab(tabId)` and `_handleTabClick`):**
+            *   When a tab button is clicked, `_handleTabClick` calls `showTab(tabId)` with the target tab's ID (from `data-tab-target` attribute).
+            *   `showTab` deactivates the currently active tab button and hides its associated content pane. It then activates the new tab button and unhides its pane.
+            *   It updates an internal `currentActiveTabId`.
+            *   **Coordination with other Modules:** After switching to a new tab, `showTab` conditionally calls `refresh()` methods on other relevant modules:
+                *   If `osc-channels-tab` is activated, it calls `App.ChannelManager.refresh(App.ConfigManager.getConfig())`.
+                *   If `variables-tab` is activated, it calls `App.VariableManager.refresh(App.ConfigManager.getConfig())`.
+                *   If `settings-tab` is activated, it calls `App.SettingsView.refresh()`.
+                *   If a layer tab (e.g., `layer-a-tab`) is activated, it extracts the layer identifier (e.g., "A") and calls `App.ConfigManager.setActiveUiLayerId(layerId)`. `InputMappingView` then reacts to the `activeUiLayerChanged` event from `ConfigManager` to display the correct gamepad and mappings.
+        *   Provides a public `getActiveTabId()` method.
+
+5.  **`inputMappingView.js` (InputMappingView)**
+    *   **Responsibility:** This is a central and complex UI module responsible for rendering the interactive gamepad visualization for the current UI layer, handling input selection, and managing the dynamic mapping configuration panel for the selected input.
+    *   **Details:**
+        *   **State Management:** Maintains `_activeLayerId`, a copy of `_config`, `_currentRawInputStates` (from server), and `_cachedLayerVisualInputs` (cache of DOM elements for gamepad inputs per layer for faster updates).
+        *   **Input Name Translation:** Uses an internal `RAW_TO_GENERIC_INPUT_MAP_JS` object to convert raw input names (especially from JSL, e.g., "S", "E") into standardized generic names (e.g., "A", "B", "LEFT_STICK_X") used consistently in the UI and mapping configuration. This map is fetched from the backend (`/api/input-mapping-definitions`) on initialization.
+        *   **Gamepad Visualization (`_initGamepadVisualization(layerId, containerId)`):**
+            *   Dynamically creates and positions HTML elements for a standard gamepad layout (buttons, D-pad, shoulders, triggers, thumbsticks with separate X/Y components) within the specified layer's container (e.g., `#gamepad-visualization-layer-a`).
+            *   Also creates a grid display for motion control inputs (Accel X/Y/Z, Gyro X/Y/Z) within a dedicated container (e.g., `#motion-controls-grid-layer-a`).
+            *   Each interactive input element is assigned a unique ID (e.g., `A-LEFT_STICK_X`), `data-input-id`, `data-layer-id`, and an `onclick` handler (`_handleInputSelection`).
+            *   Labels are created for each input element.
+        *   **Live Input Highlighting (`_updateGamepadInputStates(layerId, ...)`):**
+            *   This function is called internally when `raw_inputs_update` is received (via `_handleRawInputUpdate`).
+            *   `_handleRawInputUpdate(rawStatesData)`: Subscribes to `raw_inputs_update` from `SocketManager`. It processes the incoming raw states, translates input names using `_getGenericInputNameFromRaw`, merges states from multiple controllers (if any) for the same generic input, and stores them in `_currentRawInputStates`. It then calls `_updateGamepadInputStates` for the currently active UI layer.
+            *   `_updateGamepadInputStates` iterates through the cached visual input elements for the current layer. It updates their visual appearance (e.g., adds/removes `input-active-visual` class for buttons, adjusts `transform: scale()` for analog trigger/stick values) based on the values in `_currentRawInputStates`.
+        *   **Input Selection (`_handleInputSelection(inputId, layerId)`):**
+            *   Called when a gamepad UI element is clicked.
+            *   It calls `App.ConfigManager.setSelectedInput(inputId)` to update the global selected input state for the current layer. This, in turn, triggers `_renderMappingConfigPanel` via a subscription to `ConfigManager`'s `selectedInputChanged` event.
+        *   **Mapping Configuration Panel (`_renderMappingConfigPanel(parentElement, layerId, inputId)`):**
+            *   This function is triggered when the selected input changes (via `ConfigManager` subscription).
+            *   Dynamically generates and injects the HTML form for configuring the mapping of the currently selected input (`inputId`) for the active layer (`layerId`) into the specified `parentElement` (e.g., `#mapping-config-forms-layer-a`).
+            *   The panel includes:
+                *   Target Type selection (OSC Channel, Internal Variable, Layer Switch).
+                *   Target Name selection (dropdown or checkboxes, populated by `_populateTargetDropdown`).
+                *   Action/Mode selection (dropdown, populated by `_populateActionDropdown`).
+                *   Action-specific parameter fields (dynamically shown/hidden by `_populateActionParameters`).
+                *   Save and Clear Mapping buttons.
+        *   **Dynamic Parameter Field Population:**
+            *   `_populateTargetDropdown()`: Populates the "Target Name" dropdown (for Variables, Layer Switch) or a group of checkboxes (for OSC Channels, allowing multiple selections) with available entities from the current `_config` based on the selected "Target Type".
+            *   `_populateActionDropdown()`: Populates the "Action/Mode" dropdown with relevant actions based on the selected "Target Type" and "Target Name(s)".
+            *   `_populateActionParameters()`: Dynamically creates, shows, or hides HTML input fields for action-specific parameters.
+            *   `_populateActionParametersFromEvent()`: Helper for event handling.
+        *   **Saving and Clearing Mappings:**
+            *   `_handleSaveMapping(event, layerId, inputId)`: Collects form data and calls `App.ConfigManager.updateInputMapping()`.
+            *   `_handleClearMapping(layerId, inputId)`: Confirms with user and calls `App.SocketManager.emit('clear_input_mapping', ...)`.
+        *   **Layer Synchronization and Full Refresh (`_refreshGamepadForLayer(layerId)`):**
+            *   Subscribes to `App.ConfigManager` events: `configLoaded`, `configUpdated`, and `activeUiLayerChanged`.
+            *   When the active UI layer changes (`activeUiLayerChanged`) or the configuration is loaded/updated, this function is called for the relevant `layerId`.
+            *   It re-initializes the gamepad visualization for that layer using `_initGamepadVisualization`.
+            *   It then updates the visual status of each input element (e.g., adding `mapped` or `unmapped` classes) based on whether a mapping exists for it in the current `_config` for that layer.
+            *   It clears and potentially re-renders the mapping configuration panel for the currently selected input (if any) for that layer by calling `_renderMappingConfigPanel`.
+            *   It also calls `_updateGamepadInputStates` to apply any current raw input visuals.
+            *   **Initialization (`init`):**
+            *   Sets up subscriptions to `App.ConfigManager` for `configLoaded`, `configUpdated`, and `activeUiLayerChanged` to trigger appropriate refresh/render functions.
+            *   Subscribes to `App.SocketManager` for `raw_inputs_update` to handle live input visualization.
+            *   Ensures that the initial gamepad visualization for the default active layer is rendered once the config is loaded.
+
+6.  **`channelManager.js` (ChannelManager)**
+    *   **Responsibility:** Manages the UI within the "OSC Channels" tab, including displaying, creating, editing, and deleting OSC channel configurations, as well as showing their live values.
+    *   **Details:**
+        *   **DOM Element Caching (`_cacheDomElements`):** On initialization, caches references to key DOM elements such as the channels list area, the "Add New Channel" modal and its form inputs, and the comprehensive channel edit panel with its various fields.
+        *   **Channel List Rendering (`_renderChannelList(channelsData, fullConfig)`):
+            *   Clears and re-renders the list of all configured OSC channels in `channelsListArea`, sorted by OSC address.
+            *   For each channel, it displays:
+                *   Name, current live value (text and a visual meter bar via `_updateChannelMeter`).
+                *   Configured range (min/max), default value, and OSC data type.
+                *   The target OSC address.
+                *   A list of any input mappings (from all layers in `fullConfig`) that target this channel, showing layer, input name, and action details (e.g., "rate (Inverted, x2.0)").
+            *   Each channel item has "Edit" and "Delete" buttons.
+            *   The layout for channel information is structured in a three-column format for better readability of key details at a glance, followed by the OSC address.
+        *   **Live Value Updates (`_handleChannelValueUpdate` via `init`):
+            *   Subscribes to the `channel_value_update` event from `SocketManager`.
+            *   When an update is received, it stores the value in `_currentChannelRuntimeValues` and calls `_updateChannelMeter(channelName, currentValue)`.
+            *   `_updateChannelMeter` updates the text display of the channel's current value and adjusts the width (fill percentage) of a visual meter element (`#meter-fill-channelName`) based on the channel's configured min/max range and the current value. Handles normalization for the meter display.
+        *   **Add Channel Modal (`_showAddChannelModal`, `_hideAddChannelModal`, `_handleConfirmAddChannel`):
+            *   Handles showing/hiding the "Add New Channel" modal.
+            *   Validates that the new channel name is unique (not present in `App.ConfigManager.getConfig().internal_channels`) and not empty before submission.
+            *   On confirmation (`_handleConfirmAddChannel`), it gathers data (name, default OSC type "float", default address, etc.), emits an `add_channel` event to the server via `SocketManager`, and then hides the modal.
+        *   **Edit Channel Panel (`_editChannel`, `_updateEditPanelForOscType`, `_saveChannelChanges`, `_cancelChannelEdit`):
+            *   `_editChannel(channelName)`: Populates the persistent edit panel (`#channelEditConfig`) with the selected channel's current data (name, OSC address, OSC type, default value, min/max range, or specific string values if type is "string"). It also lists all input mappings targeting this channel.
+            *   `_updateEditPanelForOscType(oscType)`: Dynamically shows or hides specific input fields in the edit panel based on the selected OSC type (e.g., shows min/max range inputs for "float"/"int"/"bool", shows "String Value 1/2" for "string" type if it's meant for toggle-like behavior, hides irrelevant ones).
+            *   `_saveChannelChanges(event)`: Attached to the edit panel's save button. It gathers all modified data from the form, performs validation (e.g., range min < max), and emits an `update_channel` event to the server via `SocketManager`. Hides the panel on success.
+            *   `_cancelChannelEdit()`: Hides the edit panel and clears any unsaved changes or state.
+        *   **Channel Deletion (`_deleteChannel(channelName)`):
+            *   Prompts the user for confirmation before proceeding.
+            *   Emits a `delete_channel` event to the server via `SocketManager`.
+            *   Relies on the server sending an updated config to refresh the list. If the edit panel was open for the deleted channel, it is closed.
+        *   **Initialization (`init()`):
+            *   Calls `_cacheDomElements()`.
+            *   Attaches event listeners for UI elements.
+            *   Subscribes to `channel_value_update` from `SocketManager`.
+            *   Subscribes to `App.ConfigManager` events (`configLoaded`, `configUpdated`), now calling a more comprehensive `_handleConfigUpdate` internal function.
+        *   **Configuration Update Handling (`_handleConfigUpdate(data)`):
+            *   This function is called when `configLoaded` or `configUpdated` events are received from `ConfigManager`.
+            *   It re-renders the main list of channels using `_renderChannelList` with the new configuration.
+            *   Crucially, if the channel edit panel is currently open (`_currentEditingChannelName` is set), this function will re-call `_editChannel(_currentEditingChannelName)` to refresh the panel's content (including the list of mapped inputs) with the new configuration data. If the channel being edited no longer exists, the panel is closed.
+        *   **Refresh Logic (`refresh(config)`):
+            *   A public method, typically called by `UIManager` when the "OSC Channels" tab becomes active.
+            *   It calls `_renderChannelList` with the `internal_channels` part of the new `config` and the full `config`.
+
+7.  **`variableManager.js` (VariableManager)**
+    *   **Responsibility:** Manages the UI within the "Variables" tab, facilitating the creation, listing, editing, and deletion of internal variables, and displaying their live values.
+    *   **Details:**
+        *   **DOM Element Caching (`_cacheDomElements`):** Caches references to DOM elements for the variables list area, the "Add New Variable" modal, and the "Edit Variable" panel, including all its input fields (initial value, min/max, and the group of OSC-on-change settings).
+        *   **Variable List Rendering (`_renderVariableList(variablesData, fullConfig)`):
+            *   Clears and re-renders the list of all configured internal variables in `variablesListArea`, sorted alphabetically by name.
+            *   For each variable, it displays:
+                *   Name.
+                *   Current live value, along with configured Min and Max values (e.g., "Current: 50 (Min: 0, Max: 100)").
+                *   If "OSC on Change" is enabled for the variable: its target OSC address, OSC value type, and value content (e.g., "OSC: /avatar/parameters/MyVar -> value (float)").
+                *   A list of input mappings from all layers that target this variable. It specifically looks for mappings with `target_type: 'internal_variable'`, `target_name` matching the variable, and `action: 'step_by_multiplier_on_trigger'`, displaying them as "Layer A: X_BUTTON (Step by Multiplier)".
+            *   Each variable item has "Edit" and "Delete" buttons.
+        *   **Live Value Updates (`_handleVariableValueUpdate`):
+            *   Subscribes to the `variable_value_updated` event from `SocketManager` (subscription set up in `init`).
+            *   When an update is received (containing `name` and `newValue`), it finds the corresponding variable's value display element (e.g., `#variable-value-varName`) in the list and updates its text content to reflect the new current value, while retaining the min/max display.
+        *   **Add Variable Modal (`_showAddVariableModal`, `_hideAddVariableModal`, `_handleConfirmAddVariable`):
+            *   Handles showing and hiding the "Add New Variable" modal.
+            *   `_handleConfirmAddVariable` validates that the new variable name is unique (not in `App.ConfigManager.getConfig().internal_variables`) and not empty.
+            *   On successful validation, it constructs a new variable object (with default initial value 0, and empty min/max and OSC settings) and emits an `add_variable` event to the server via `SocketManager`. Then hides the modal.
+        *   **Edit Variable Panel (`_editVariable`, `_handleSaveVariable`, `_cancelVariableEdit`, `_toggleOscConfigGroupVisibility`):
+            *   `_editVariable(variableName)`: Populates the persistent edit panel (`#variableEditConfig`) with the selected variable's data: initial value, min/max values. It also populates the "OSC on Change" settings: enable checkbox, OSC address, OSC value type, and OSC value content. The visibility of the OSC settings group is managed by `_toggleOscConfigGroupVisibility` based on the checkbox state. It also lists input mappings that target this variable.
+            *   `_toggleOscConfigGroupVisibility(isVisible)`: Shows or hides the `div` containing OSC configuration fields based on the "Send OSC on Change" checkbox.
+            *   `_handleSaveVariable(event)`: Attached to the edit panel's save button. It gathers all data from the form (initial, min, max, and all OSC-on-change fields), performs validation (e.g., min < max if both are set), and emits an `update_variable` event to the server via `SocketManager`. Hides the panel on success.
+            *   `_cancelVariableEdit()`: Hides the edit panel and clears its state.
+        *   **Variable Deletion (`_deleteVariable(variableName)`):
+            *   Prompts the user for confirmation.
+            *   Emits a `delete_variable` event to the server via `SocketManager`.
+            *   Similar to channel deletion, it then iterates through all input mappings. If any mapping targets the deleted variable (type `internal_variable`, action `step_by_multiplier_on_trigger`), it sends an `update_input_mapping` event to the server with `null` data to clear that specific mapping.
+        *   **Initialization (`init()`):
+            *   Calls `_cacheDomElements()`.
+            *   Attaches event listeners for:
+                *   The main "Add New Variable" button.
+                *   Confirm/cancel buttons in the Add Variable modal.
+                *   The `variablesListArea` (using event delegation for "Edit"/"Delete" clicks).
+                *   Save/cancel buttons in the Edit Variable panel.
+                *   The "Send OSC on Change" checkbox in the edit panel (to toggle OSC config field visibility).
+            *   Subscribes to `variable_value_updated` from `SocketManager` for live value display updates.
+            *   Subscribes to `ConfigManager` events (`configLoaded`, `configUpdated`) to trigger `refresh`.
+        *   **Refresh Logic (`refresh(config)`):
+            *   Called by `UIManager` when the "Variables" tab is activated or by `ConfigManager` updates.
+            *   Calls `_renderVariableList` with the `internal_variables` from the `config` and the full `config`.
+            *   Updates `_currentVariablesData` and ensures the edit panel is hidden if no variable is actively being edited.
+
+8.  **`settingsView.js` (SettingsView)**
+    *   **Responsibility:** Manages all forms and interactions within the "Settings" tab, covering OSC server settings, global input parameters, and configuration file management (loading, saving, deleting named presets).
+    *   **Details:**
+        *   **Module Structure:** Divided into private functions for specific settings sections (OSC Server, Global Input, Configuration Management) and event handlers.
+        *   **DOM Element Caching:** On initialization, various `_init<SectionName>Settings()` functions are called to query and cache DOM elements for input fields and buttons within each section of the settings tab.
+        *   **OSC Server Settings:**
+            *   `_populateOscServerSettings(oscSettings)`: Populates form fields for OSC server IP, port, and max updates/sec from the `osc_settings` section of the configuration.
+            *   `_handleSaveOscSettings()`: Gathers values from the form, constructs an `oscSettings` object, and emits `update_osc_settings` to the server via `SocketManager`.
+        *   **Global Input Settings:**
+            *   `_populateGlobalInputSettings(inputSettings)`: Populates form fields for stick deadzone, trigger deadzone, and stick curve from the `input_settings` section of the configuration.
+            *   `_handleSaveGlobalInputSettings()`: Gathers values, constructs an `inputSettings` object, and emits `update_input_settings` to the server via `SocketManager`.
+        *   **Configuration File Management:**
+            *   `_populateConfigList(configNamesArray)`: Populates a dropdown select element (`configListSelect`) with names of saved configuration presets received from the server.
+            *   `_refreshConfigList()`: Emits a `list_configs` event to `SocketManager` to request an updated list of saved configuration names from the server.
+            *   `_handleLoadNamedConfig()`: Emits a `load_named_config` event with the selected configuration name to `SocketManager`.
+            *   `_handleDeleteNamedConfig()`: After user confirmation, emits a `delete_named_config` event with the selected configuration name.
+            *   `_handleSaveActiveConfigAs()`: Takes a name from an input field, validates it (alphanumeric, underscores, hyphens), and emits `save_active_config_as` with the name. Clears the input field on success (via `_handleConfigOperationStatus`).
+            *   Event Listeners for Server Feedback:
+                *   Subscribes to `configs_list` from `SocketManager` (`_handleConfigsList`) to update the dropdown via `_populateConfigList`.
+                *   Subscribes to `config_operation_status` from `SocketManager` (`_handleConfigOperationStatus`) to display success/failure alert messages to the user for load/save/delete operations and to clear the "save as" name input upon successful save.
+        *   **Initialization (`init()`):
+            *   Calls the individual `_init...()` functions for each settings section to set up DOM elements and attach event listeners to save buttons and config management buttons.
+            *   Subscribes to `configLoaded` and `configUpdated` events from `App.ConfigManager`. When these occur, `_onConfigLoaded` or `_onConfigUpdated` are called, which in turn re-populate the OSC and Input settings forms using `_populateOscServerSettings` and `_populateGlobalInputSettings`. `_onConfigLoaded` also triggers `_refreshConfigList()` to ensure the list of named configurations is up-to-date.
+            *   Subscribes directly to `App.SocketManager` for `configs_list` and `config_operation_status` events.
+        *   **Refresh Method (`refresh()`):
+            *   This public method is typically called by `UIManager` when the Settings tab is activated.
+            *   It calls `_onConfigLoaded(App.ConfigManager.getConfig())` to ensure all forms and the config list are populated with the latest data from the active configuration.
+        *   **Layer Hotkeys:** Functionality for managing layer hotkey assignments is not currently implemented within this module as per the reviewed code.
+
+9.  **`globalStatusView.js` (GlobalStatusView)**
+    *   **Responsibility:** Displays global status information in the application's header/status bar, primarily connected controller types, their IDs, and battery levels. Also provides controls for JSL device management.
+    *   **Details:**
+        *   **DOM Element Management:**
+            *   Identifies and manages pre-defined DOM elements for four XInput slots (e.g., `id="xinput-slot-0"` to `id="xinput-slot-3"`).
+            *   Identifies a pre-defined DOM element for the primary JSL device slot (`id="player-slot-0"`).
+            *   Identifies a container element (`id="dynamic-jsl-slots-container"`) where it dynamically creates and manages additional slot elements for other connected JSL devices (P1 through P15).
+            *   Manages buttons for "Rescan JSL Controllers" (`id="global-jsl-rescan-button"`) and "Disconnect All JSL Controllers" (`id="global-jsl-disconnect-all-button"`).
+        *   **Primary Status Update (`_handleControllerStatusUpdate(data)`):
+            *   Subscribes to a single, consolidated `controller_status_update` event from `SocketManager`. This `data` object is expected to contain:
+                *   `xinput_slots`: An array or object detailing the status of each of the 4 XInput slots (occupied, controller ID, type, battery info).
+                *   `jsl_devices`: An array of all currently connected JSL devices, each with its ID, type, slot display ID, battery info, etc.
+            *   Calls `_updateSlotDOM` for each of the four fixed XInput slots, passing the relevant part of `data.xinput_slots`.
+            *   Calls `_updateSlotDOM` for the fixed primary JSL slot (P0), using `data.jsl_devices[0]`.
+            *   Clears the `dynamicJslSlotsContainer` and then iterates from `data.jsl_devices[1]` up to `data.jsl_devices[15]` (or end of array). For each device, it creates a new `div` element (e.g., `id="player-slot-1"`), appends it to the container, and then calls `_updateSlotDOM` to populate it.
+        *   **Individual Slot DOM Update (`_updateSlotDOM(slotElement, controllerData, defaultText, slotTypePrefix)`):
+            *   This is a core helper function responsible for rendering a single controller slot in the UI.
+            *   It clears any previous status and battery-related CSS classes from the `slotElement`.
+            *   If `controllerData` indicates an occupied slot:
+                *   Sets the `textContent` to display the slot ID (e.g., "X0", "P1") and a short form of the controller's unique ID (e.g., "J0", "XInput3").
+                *   Sets the `title` attribute for tooltips with more details: controller type, full unique ID, and battery level/type string.
+                *   Adds CSS classes like `connected` and `status-good`.
+                *   Applies a specific background CSS class based on battery status (e.g., `battery-bg-wired`, `battery-bg-full`, `battery-bg-medium`, `battery-bg-low`, `battery-bg-empty`, `battery-bg-pro` for Switch Pro controllers, `battery-bg-unknown`, or `battery-bg-disconnected`).
+            *   If `controllerData` indicates an empty/disconnected slot, sets default text (e.g., "X1: Empty") and appropriate CSS classes (`disconnected`, `empty`, `battery-bg-disconnected`).
+        *   **JSL Controller Actions:**
+            *   `_handleRescanJsl()`: Attached to the rescan button. Emits `jsl_rescan_controllers` to the server via `SocketManager`.
+            *   `_handleDisconnectAllJsl()`: Attached to the disconnect all button. Prompts the user for confirmation, then emits `jsl_disconnect_all_controllers`.
+            *   Listens for `jsl_rescan_status` and `jsl_disconnect_all_status` events from the server to log feedback and alert users of errors.
+        *   **Initialization (`init()`):
+            *   Caches references to the main status bar container, JSL action buttons, and the dynamic JSL slots container.
+            *   Attaches click event listeners to the JSL rescan and disconnect all buttons.
+            *   Subscribes to `controller_status_update`, `jsl_rescan_status`, and `jsl_disconnect_all_status` events from `SocketManager`.
+            *   Uses `App.SocketManager.onConnected()` to emit an initial `get_controller_status` request to the server to populate the status bar as soon as the client connects.
+
+10. **`appLogger.js` (AppLogger)**
+    *   **Responsibility:** Provides a frontend logging mechanism by subscribing to various significant `SocketManager` events and logging them to the browser's developer console for debugging and monitoring purposes.
+    *   **Details:**
+        *   Its `initialize()` method is called from `mainApp.js` after `SocketManager` is expected to be available.
+        *   **Robust Initialization:** It checks if `App.SocketManager` is available. If not (e.g., due to script loading order), it schedules a retry of its `initialize` function after a short delay (500ms). This helps ensure it eventually attaches its listeners.
+        *   **Event Subscriptions:** Once `SocketManager` is confirmed, `AppLogger` subscribes to a predefined list of Socket.IO events via `App.SocketManager.on()`:
+            *   `controller_status_update`: Logs the received controller status data (using `JSON.parse(JSON.stringify())` for a clean object log).
+            *   `active_config_update`: Logs a message indicating the active config was updated, but avoids logging the entire (potentially large) config object to the console by default.
+            *   `active_config_saved`: Logs the success or failure message from this event.
+            *   `config_loaded`: Logs the success or failure of loading a named configuration.
+            *   `jsl_scan_complete`: Logs data related to JSL scan completion.
+            *   `jsl_disconnect_all_status`: Logs the status of the JSL disconnect all command.
+            *   `connect`: Logs when `SocketManager` reports a successful connection.
+            *   `disconnect`: Logs when `SocketManager` reports a disconnection, including the reason.
+            *   `connect_error`: Logs connection errors reported by `SocketManager`.
+        *   **Log Formatting:** All logs made by `AppLogger` are prefixed with `[APP LOG]` for easy identification in the browser's developer console (using `console.info`, `console.warn`, or `console.error` as appropriate).
+        *   **Scope:** It currently does **not** render logs to a dedicated UI tab within the application itself, nor does it globally capture and reformat all `console.log/warn/error` calls from other modules. Its logging is specifically based on the Socket.IO events it subscribes to.
+
+11. **`gamepadView.js` (Minimal)**
+    *   **Responsibility & Details:** A placeholder file. Its original intended functionality, hinted by its internal comment "Renders gamepad visualization and handles its interactions," has been fully integrated into `InputMappingView.js`. Currently, the file only contains a `console.log("gamepadView.js loaded");` statement.
+
+12. **`layerManager.js` (Minimal/Placeholder)**
+    *   **Responsibility & Details:** A placeholder file. Its internal comment "Manages layer-specific activation settings UI within layer tabs" suggests a role in UI for layer settings. However, in the current architecture, the UI for configuring global layer hotkeys (i.e., assigning a controller input to directly activate a layer, stored in `layer_keybinds`) is handled within `SettingsView.js`. The logic for input mappings that perform a "Set Active Layer" action is configured in `InputMappingView.js` and executed by the backend. Currently, the file only contains a `console.log("layerManager.js loaded");` statement.
+
+13. **`utils.js` (Minimal)**
+    *   **Responsibility & Details:** A placeholder file intended for stateless, reusable utility functions that might be shared across multiple frontend modules, as suggested by its internal comment "Frontend utility functions." It is not currently populated with any such functions and only contains a `console.log("utils.js loaded");` statement.
+
+Configuration Data Structure (`active_config.json` - Detailed):
+==============================================================
+The `active_config.json` file is central to the application's operation.
+
+*   **`osc_settings`**: object
+    *   `ip`: string (e.g., "127.0.0.1") - Target IP address for OSC messages.
+    *   `port`: integer (e.g., 9000) - Target port for OSC messages.
+    *   `max_updates_per_second`: integer (e.g., 60) - Currently informational for `OSCService`, but could be used for throttling if implemented.
+*   **`web_settings`**: object
+    *   `host`: string (e.g., "127.0.0.1") - Host address for the Flask web server.
+    *   `port`: integer (e.g., 5000) - Port for the Flask web server.
+*   **`input_settings`**: object
+    *   `stick_deadzone`: float (e.g., 0.1) - Deadzone for analog sticks (XInput).
+    *   `

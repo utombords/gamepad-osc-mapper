@@ -1,0 +1,71 @@
+name: build-and-release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build onefile
+        run: |
+          pyinstaller --clean --noconfirm main.spec
+      - name: Hash artifact
+        shell: bash
+        run: |
+          cd dist
+          sha256sum GamepadOSCMapper.exe > GamepadOSCMapper.exe.sha256
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/portable/GamepadOSCMapper | Out-Null
+          Copy-Item -Path dist/GamepadOSCMapper.exe -Destination dist/portable/GamepadOSCMapper/
+          if (Test-Path README.md) { Copy-Item README.md dist/portable/GamepadOSCMapper/ }
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist/portable/GamepadOSCMapper/ }
+          if (Test-Path CHANGELOG.md) { Copy-Item CHANGELOG.md dist/portable/GamepadOSCMapper/ }
+          if (Test-Path THIRD_PARTY_NOTICES.md) { Copy-Item THIRD_PARTY_NOTICES.md dist/portable/GamepadOSCMapper/ }
+          if (Test-Path docs/JoyShockLibraryMOD.txt) { New-Item -ItemType Directory -Force -Path dist/portable/GamepadOSCMapper/docs | Out-Null; Copy-Item docs/JoyShockLibraryMOD.txt dist/portable/GamepadOSCMapper/docs/ }
+          New-Item -ItemType Directory -Force -Path dist/portable/GamepadOSCMapper/configs | Out-Null
+          New-Item -ItemType File -Force -Path dist/portable/GamepadOSCMapper/configs/.keep | Out-Null
+          $zipName = "GamepadOSCMapper-$env:GITHUB_REF_NAME-win64.zip"
+          if ($env:GITHUB_REF_NAME -eq $null -or $env:GITHUB_REF_NAME -eq '') { $zipName = "GamepadOSCMapper-portable-win64.zip" }
+          Compress-Archive -Path dist/portable/GamepadOSCMapper/* -DestinationPath dist/$zipName -Force
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: GamepadOSCMapper-win
+          path: |
+            dist/GamepadOSCMapper.exe
+            dist/GamepadOSCMapper.exe.sha256
+            dist/GamepadOSCMapper-*-win64.zip
+
+  release:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GamepadOSCMapper-win
+          path: dist
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/GamepadOSCMapper.exe
+            dist/GamepadOSCMapper.exe.sha256
+            dist/GamepadOSCMapper-*-win64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+

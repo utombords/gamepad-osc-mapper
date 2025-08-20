@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.env
+
+# PyInstaller
+build/
+dist/
+*.spec
+*.zip
+*.rar
+*.7z
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node/Frontend
+node_modules/
+*.log
+
+# Misc
+*.swp
+*.swo
+.coverage
+.pytest_cache/
+.cache/
+
+# Local configs generated at runtime
+configs/active_config.json
+
+

@@ -1,0 +1,1344 @@
+/* Custom styles for Gamepad OSC Configuration */ 
+
+/* Tailwind Utility Override Fix */
+.hidden {
+    display: none !important;
+}
+
+:root {
+    --color-matrix-night: #000000; /* Changed to pure black */
+    --color-panel-bg: #1A152D; /* Darker panel background, slightly more purple */
+    --color-panel-border: #302A4D; /* Border for panels, a bit lighter purple/blue */
+    --color-background-secondary: var(--color-input-bg); /* ADDED for general slot background */
+
+    --color-input-bg: #25203D; /* Background for input fields */
+    --color-input-border: #4A406C; /* Border for input fields */
+    --color-input-focus-border: #6C63FF; /* Electric blue for focus - primary accent */
+    --color-input-focus-ring: rgba(108, 99, 255, 0.4); /* Ring for focus */
+
+    --color-text-primary: #E0E0FF; /* Very light, slightly cool lavender/white */
+    --color-text-secondary: #A0A0CC; /* Lighter gray/lavender for less prominent text */
+    --color-text-muted: #7070AA; /* Muted text for descriptions, etc. */
+
+    --color-accent-primary: #6C63FF; /* Electric Blue/Purple */
+    --color-accent-primary-hover: #5A52E0; /* Darker shade for hover */
+    --color-accent-secondary: #FFD700; /* Deep Gold */
+    --color-accent-secondary-hover: #E6C200; /* Darker gold for hover */
+    --color-accent-auxiliary: #ffbb00; /* Deep Gold */
+    --color-accent-auxiliary-hover: #d39b00; /* Darker gold for hover */
+
+    --color-danger: #E53E3E; /* Standard danger red */
+    --color-danger-hover: #C53030; /* Darker red */
+    --color-success: #38A169; /* Standard success green */
+    --color-success-hover: #2F855A; /* Darker green */
+
+    /* Gamepad specific */
+    --color-gamepad-bg: #141024;
+    --color-gamepad-border: #2A253D;
+    --color-button-unmapped: var(--color-input-border);
+    --color-button-mapped: var(--color-success); 
+    --color-button-active-border: var(--color-accent-primary); /* ADDED for connected slot border */
+    --color-button-selected-border: var(--color-accent-primary); /* Back to Electric Blue/Purple */
+    --color-button-selected-shadow: rgba(108, 99, 255, 0.7); /* Electric Blue/Purple glow */
+
+    --color-trigger-unmapped: var(--color-input-border);
+    --color-trigger-mapped: var(--color-success);
+    --color-trigger-selected-border: var(--color-accent-primary); /* Back to Electric Blue/Purple */
+    --color-trigger-selected-shadow: rgba(108, 99, 255, 0.7); /* Electric Blue/Purple glow */
+
+    --color-stick-component-unmapped: var(--color-input-border);
+    --color-stick-component-mapped: var(--color-success);
+    --color-stick-component-selected-border: var(--color-accent-primary); /* Back to Electric Blue/Purple */
+    --color-stick-component-selected-shadow: rgba(108, 99, 255, 0.7); /* Electric Blue/Purple glow */
+    
+    --color-meter-fill: var(--color-accent-primary);
+    --color-meter-value-text: var(--color-text-primary);
+    --color-input-active-glow: var(--color-accent-secondary); /* Gold for active inputs */
+}
+
+@keyframes selected-energize {
+    0% {
+        box-shadow: 0 0 5px 3px var(--color-button-selected-shadow);
+    }
+    50% {
+        box-shadow: 0 0 10px 6px var(--color-button-selected-shadow);
+    }
+    100% {
+        box-shadow: 0 0 5px 3px var(--color-button-selected-shadow);
+    }
+}   
+
+/* Background flash animation for successful save */
+@keyframes flashGreenToBlack {
+    0% {
+        background-color: var(--color-success); /* Start with success green */
+    }
+    30% { /* Hold green for a moment */
+        background-color: var(--color-success);
+    }
+    100% {
+        background-color: var(--color-matrix-night); /* Fade to original background */
+    }
+}
+
+.body-save-success-flash {
+    animation-name: flashGreenToBlack;
+    animation-duration: 0.8s; /* Adjust duration as needed */
+    animation-timing-function: ease-out;
+    animation-fill-mode: forwards; /* Keep the end state of the animation */
+}
+
+@keyframes blinkRed {
+    0% { background-color: var(--color-danger); }
+    49% { background-color: var(--color-danger); }
+    50% { background-color: var(--color-danger-hover); } /* Or a slightly different red/darker */
+    99% { background-color: var(--color-danger-hover); }
+    100% { background-color: var(--color-danger); }
+}
+
+body {
+    background-color: var(--color-matrix-night);
+    color: var(--color-text-primary);
+    /* Ensure any Tailwind base styles for text color on body are overridden or matched */
+}
+
+.config-panel {
+    background-color: var(--color-panel-bg); 
+    padding: 1.5rem; 
+    border-radius: 0.5rem; 
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1); /* Adjusted shadow for darker theme */
+    border-width: 1px; 
+    border-color: var(--color-panel-border); 
+    border-style: solid;
+} 
+
+.form-input-base {
+    margin-top: 0.25rem; 
+    display: block; 
+    width: 100%; 
+    border-radius: 0.375rem; 
+    background-color: var(--color-input-bg); 
+    border-width: 1px; 
+    border-style: solid; 
+    border-color: var(--color-input-border); 
+    color: var(--color-text-primary); 
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
+    font-size: 0.875rem; 
+    line-height: 1.25rem; 
+    padding: 0.5rem 0.75rem; 
+}
+
+.form-input-base:focus {
+    border-color: var(--color-input-focus-border); 
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05), 0 0 0 3px var(--color-input-focus-ring); 
+    outline: 2px solid transparent; 
+    outline-offset: 2px;
+}
+
+/* Base Button Style */
+.btn {
+    display: inline-flex; /* Allows for aligning items (like icons + text) */
+    align-items: center;
+    justify-content: center;
+    position: relative; /* For potential pseudo-elements or absolutely positioned children */
+    padding: 0.5rem 1rem; /* Default padding (medium size) */
+    font-size: 0.875rem; /* Default font size (text-sm in Tailwind) */
+    line-height: 1.25rem;
+    font-weight: 500; /* medium */
+    border-radius: 0.375rem; /* rounded-md */
+    border: 1px solid transparent; /* Default to no visible border, color modifiers can add */
+    cursor: pointer;
+    text-decoration: none;
+    user-select: none; /* Prevent text selection on click */
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+    transition-timing-function: ease-in-out;
+    transition-duration: 0.15s;
+    outline: none; /* Remove default browser outline, we use box-shadow for focus */
+}
+
+.btn:focus-visible { /* More accessible focus styling */
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    /* Default focus ring, color modifiers should override this with their specific accent color */
+    box-shadow: 0 0 0 3px var(--color-input-focus-ring); 
+}
+
+/* Color/Theme Modifiers */
+.btn-primary {
+    background-color: var(--color-accent-primary);
+    color: var(--color-text-primary); /* Ensuring contrast, often white or light on dark primary */
+    /* border-color: var(--color-accent-primary); /* Or transparent if bg is enough */
+}
+.btn-primary:hover {
+    background-color: var(--color-accent-primary-hover);
+}
+.btn-primary:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-primary) 40%, transparent);
+}
+
+.btn-secondary {
+    background-color: var(--color-input-border); 
+    color: var(--color-text-secondary);
+    border-color: var(--color-panel-border);
+}
+.btn-secondary:hover {
+    background-color: var(--color-panel-border);
+    color: var(--color-text-primary);
+    border-color: var(--color-input-border); /* Slight change on hover */
+}
+.btn-secondary:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-panel-border) 50%, transparent);
+}
+
+.btn-danger {
+    background-color: var(--color-danger);
+    color: var(--color-text-primary); /* Ensure high contrast */
+    /* border-color: var(--color-danger); */
+}
+.btn-danger:hover {
+    background-color: var(--color-danger-hover);
+}
+.btn-danger:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 40%, transparent);
+}
+
+.btn-success {
+    background-color: var(--color-success);
+    color: var(--color-text-primary); /* Ensure high contrast */
+    /* border-color: var(--color-success); */
+}
+.btn-success:hover {
+    background-color: var(--color-success-hover);
+}
+.btn-success:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 40%, transparent);
+}
+
+/* Outline Modifiers (Example) */
+.btn-outline-primary {
+    background-color: transparent;
+    color: var(--color-accent-primary);
+    border-color: var(--color-accent-primary);
+}
+.btn-outline-primary:hover {
+    background-color: color-mix(in srgb, var(--color-accent-primary) 15%, transparent); /* Slight bg tint on hover */
+    color: var(--color-accent-primary-hover); /* Can darken text too if desired */
+    border-color: var(--color-accent-primary-hover);
+}
+.btn-outline-primary:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-primary) 40%, transparent);
+}
+
+/* Size Modifiers */
+.btn-xs { /* New: Extra Small */
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+    line-height: 1; 
+    border-radius: 0.25rem;
+}
+
+.btn-sm { /* Adjusted to match old btn-action-header dimensions */
+    padding: 0.35rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem; 
+    /* border-radius: 0.375rem; /* Default from .btn is fine */
+}
+
+.btn-md { /* This is the default size defined in .btn */
+    /* padding: 0.5rem 1rem; font-size: 0.875rem; from .btn base */
+}
+
+.btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    border-radius: 0.5rem; 
+}
+
+/* New Color Modifier for Warning/Edit */
+.btn-warning {
+    background-color: var(--color-accent-secondary);
+    color: var(--color-matrix-night); /* Dark text for contrast on gold/yellow */
+    /* border-color: var(--color-accent-secondary-hover); */
+}
+.btn-warning:hover {
+    background-color: var(--color-accent-secondary-hover);
+}
+.btn-warning:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-secondary) 40%, transparent);
+}
+
+/* --- OLD BUTTON STYLES HAVE BEEN REFACTORED --- */
+/* The definitions previously here for .btn-primary (old version), .btn-secondary (old version), 
+   .btn-danger (old version), .btn-success (old version), .btn-action-header, 
+   .btn-action-header-danger, .btn-action-sm, .btn-action-edit, and .btn-action-delete 
+   have been removed as their functionality is now covered by the .btn base class 
+   and its color/size modifiers. 
+   The commented-out .btn-small definitions below have also been effectively replaced.
+*/
+
+/* Old .btn-small (used by global status bar buttons) - Now maps to .btn .btn-color .btn-sm */
+/* These definitions are now fully covered by .btn + .btn-sm + color modifiers */
+/* 
+.btn-small {
+    padding: 0.25rem 0.5rem; 
+    font-size: 0.75rem;    
+    line-height: 1;        
+}
+.btn-small.btn-secondary {
+    background-color: var(--color-input-bg); 
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-panel-border);
+}
+.btn-small.btn-secondary:hover {
+    background-color: var(--color-panel-border);
+    border-color: var(--color-input-border);
+    color: var(--color-text-primary);
+}
+.btn-small.btn-danger {
+    background-color: var(--color-danger); 
+    color: var(--color-text-primary); 
+    border: 1px solid var(--color-danger-hover);
+}
+.btn-small.btn-danger:hover {
+    background-color: var(--color-danger-hover);
+    border-color: var(--color-danger);
+}
+*/
+
+.panel-header {
+    font-size: 1.25rem; 
+    line-height: 1.75rem; 
+    font-weight: 600; 
+    margin-bottom: 1rem; 
+    color: var(--color-text-primary); 
+}
+
+.panel-subheader {
+    font-size: 1.25rem; /* text-xl */
+    line-height: 1.75rem;
+    font-weight: 600; /* font-semibold */
+    color: var(--color-accent-primary);
+    margin-bottom: 0.5rem; /* mb-2 */
+}
+
+.form-label {
+    display: block; 
+    font-size: 0.875rem; 
+    line-height: 1.25rem; 
+    font-weight: 500; 
+    color: var(--color-text-secondary); 
+    margin-bottom: 0.25rem; 
+}
+
+.input-description {
+    margin-top: 0.25rem; 
+    font-size: 0.75rem; 
+    line-height: 1rem; 
+    color: var(--color-text-muted); 
+}
+
+.selected-indicator-badge {
+    padding: 0.35rem 0.85rem; 
+    background-color: var(--color-accent-primary); /* Electric Blue/Purple background */
+    color: #FFFFFF; /* Bright white text for max contrast */
+    border-radius: 9999px; 
+    font-size: 0.9rem; 
+    line-height: 1.25rem; 
+    font-weight: 600; 
+    border: 1px solid var(--color-accent-primary-hover); /* Subtle darker border */
+    text-transform: uppercase; 
+    letter-spacing: 0.05em; 
+}
+
+.badge-channel-edit-active {
+    background-color: var(--color-accent-secondary) !important; /* Gold background */
+    color: var(--color-matrix-night) !important; /* Dark text for high contrast on gold */
+    border: 1px solid var(--color-accent-secondary-hover) !important; /* Match edit button border */
+    /* If selected-indicator-badge had an animation, we might need to explicitly set animation: none; here */
+}
+
+.channel-details-container {
+    margin-top: 0.25rem; 
+    font-size: 0.875rem; 
+    line-height: 1.25rem; 
+    color: var(--color-text-secondary); 
+}
+
+.channel-details-container > div + div {
+    margin-top: 0.25rem; 
+}
+
+.mapped-inputs-section {
+    margin-top: 0.5rem; 
+    padding-top: 0.25rem; 
+    border-top-color: var(--color-panel-border); 
+    border-top-style: solid;
+}
+
+.mapped-inputs-label {
+    font-weight: 500; 
+    font-size: 0.75rem; 
+    line-height: 1rem; 
+    color: var(--color-text-secondary); 
+    display: block; 
+}
+
+.mapped-inputs-list {
+    margin-top: 0.25rem; 
+    font-size: 0.75rem; 
+    line-height: 1rem; 
+    color: var(--color-text-muted); 
+    list-style-type: disc; 
+    list-style-position: inside; 
+    padding-left: 0; 
+}
+
+/* MOVED FROM INLINE STYLE BLOCK */
+.gamepad {
+    width: 700px;  
+    height: 450px;  
+    position: relative;
+    background: var(--color-gamepad-bg); 
+    border-radius: 20px;
+    margin: 0px 0; 
+    border: 1px solid var(--color-gamepad-border); 
+}
+
+.button {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    position: absolute;
+    cursor: pointer;
+    background: none; /* Explicitly set no base background */
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.button:hover {
+    filter: brightness(1.2);
+}
+
+.button.mapped {
+    background: var(--color-button-mapped); /* Reverted from LIME to theme variable, REMOVED !important */
+}
+.button.unmapped { /* RESTORED - Unmapped state to theme variable */
+    background-color: var(--color-button-unmapped); /* Changed from 'background' to 'background-color' */
+}
+
+.button.selected {
+    border: 2px solid var(--color-button-selected-border);  
+    animation: selected-energize 2.5s infinite ease-in-out; /* UNCOMMENTED */
+    /* box-shadow is now handled by the animation */
+}
+
+/* Specific overrides for START and BACK buttons */
+#START, #BACK {
+    width: 45px; /* Adjust as needed */
+    height: 20px; /* Adjust as needed */
+    border-radius: 5px; /* Slotted look */
+    /* They will inherit other .button properties like position, cursor, transition etc. */
+    /* If they also need to be mapped/unmapped visually like triggers, we might need to adjust JS or add more CSS */
+}
+
+.button-label {
+    position: absolute;
+    color: var(--color-text-primary); 
+    font-size: 12px;
+    text-shadow: 1px 1px 2px black;
+    pointer-events: none;
+    user-select: none;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+}
+
+.trigger {
+    width: 40px;
+    height: 40px;
+    position: absolute;
+    background: none; /* Explicitly set no base background */
+    cursor: pointer;
+    border-radius: 5px;
+    transition: all 0.2s;
+}
+.trigger:hover {
+    filter: brightness(1.2);
+}
+.trigger.mapped {
+    background: var(--color-trigger-mapped); /* Reverted from LIME to theme variable, REMOVED !important */
+}
+.trigger.unmapped { /* RESTORED - Unmapped state to theme variable */
+    background: var(--color-trigger-unmapped);
+}
+.trigger.selected {
+    border: 2px solid var(--color-trigger-selected-border); 
+    animation: selected-energize 2.5s infinite ease-in-out; /* UNCOMMENTED */
+    /* box-shadow is now handled by the animation */
+}
+.trigger-label {
+    position: absolute;
+    color: var(--color-text-primary); 
+    font-size: 12px;
+    text-shadow: 1px 1px 2px black;
+    pointer-events: none;
+    user-select: none;
+    transform: translate(-50%, -50%); /* Ensure consistent positioning */
+}
+
+.stick-component {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px; 
+    position: absolute;
+    background: none; /* Explicitly set no base background */
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; 
+    align-items: center;
+    justify-content: center;
+}
+.stick-component:hover {
+    filter: brightness(1.2);
+}
+.stick-component.mapped {
+    background: var(--color-stick-component-mapped); /* Reverted from LIME to theme variable, REMOVED !important */
+}
+.stick-component.unmapped { /* RESTORED - Unmapped state to theme variable */
+    background: var(--color-stick-component-unmapped);
+}
+.stick-component.selected {
+    border: 2px solid var(--color-stick-component-selected-border); 
+    animation: selected-energize 2.5s infinite ease-in-out; /* UNCOMMENTED */
+    /* box-shadow is now handled by the animation */
+}
+.stick-component-label {
+    font-size: 0.65rem; /* Small text for X/Y labels */
+    color: var(--color-text-secondary); /* Or other suitable color */
+    pointer-events: none; /* So it doesn't interfere with stick component click */
+    position: absolute; /* Positioning within the stick component */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--color-panel-bg); 
+}
+::-webkit-scrollbar-thumb {
+    background: var(--color-input-border); 
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-panel-border); 
+}
+
+/* Multi-select dropdown styling for dark theme */
+.dark-options-multiselect {
+    /* inherits .form-input-base styles, specific overrides below */
+}
+.dark-options-multiselect option {
+    background-color: var(--color-input-bg); /* Match input bg */
+    color: var(--color-text-primary); /* Ensure text is visible */
+    padding: 0.25rem 0.5rem; /* Add some padding to options */
+}
+
+.dark-options-multiselect option:hover {
+    /* For some browsers, :hover on <option> is not stylable. This is a best effort. */
+    background-color: var(--color-accent-primary-hover); /* Use hover color */
+    color: var(--color-text-primary);
+}
+
+.dark-options-multiselect option:checked {
+    /* For some browsers, :checked on <option> is not reliably stylable for background. */
+    /* We rely on the browser's default selection highlight which usually inverts colors or uses system highlight. */
+    /* If you need a stronger visual, it often requires custom JS-based dropdowns. */
+    /* Example: Add a subtle border or slightly different text color if supported */
+    /* box-shadow: inset 0 0 0 2px var(--color-accent-primary); */ /* This might be too much */
+    font-weight: bold; /* Make selected options bold */
+    color: var(--color-accent-secondary); /* Gold for selected text */
+}
+
+/* Channel List Item Meter Bar */
+.channel-item-meter-fill { 
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 0%; /* Initial width, controlled by JS */
+    background-color: var(--color-meter-fill); 
+    opacity: 0.3; /* Make it semi-transparent to not obscure text too much */
+    z-index: 5; /* Behind content but above background */
+    border-radius: inherit; /* Inherit from parent if parent has rounded corners, e.g. the panel itself */
+    transition: width 0.1s ease-out;
+}
+
+.channel-current-value-display {
+    color: var(--color-meter-value-text); /* Using a specific variable */
+    /* Other styles (font-size, weight) are inline or from parent. */
+    position: relative; /* Ensure it's above the fill if needed, though z-index on wrapper helps */
+    z-index: 15; 
+}
+
+/* Live input active state highlight */
+.input-active {
+    /* box-shadow: 0 0 10px 3px var(--color-accent-auxiliary); */ /* Existing subtle glow */
+    /* border: 2px solid var(--color-accent-auxiliary-hover); */
+    /* For better visibility of mapping status, let's ensure active is distinct */
+    border: 3px solid var(--color-input-active-glow, gold) !important; /* Thicker gold border */
+    box-shadow: none !important; /* Remove any glow effect for active state */
+}
+
+/* New style for mapped inputs to have a green background */
+.input-mapped-visual {
+    background-color: #3B82F6; /* Blue-500 for mapped inputs */
+    box-shadow: 0 0 8px #3B82F6;
+}
+
+.input-active-visual {
+    background-color: #FBBF24; /* Amber-400 for active inputs */
+    box-shadow: 0 0 8px #FBBF24; /* SIMPLIFIED: Single, less intense glow */
+}
+
+.selected {
+    /* ... existing code ... */
+}
+
+.gamepad-input-display.unmapped,
+.button.unmapped,
+/* ... existing code ... */
+
+/* Utility classes for more granular text styling */
+.text-details-sm {
+    font-size: 0.8rem; /* Slightly smaller */
+    line-height: 1.15rem;
+    color: var(--color-text-secondary);
+}
+
+/* The .btn-action-sm, .btn-action-edit, and .btn-action-delete classes 
+   that were previously here have been removed. Their functionality is now 
+   handled by .btn .btn-warning .btn-xs and .btn .btn-danger .btn-xs respectively, 
+   applied directly in the JavaScript that generates these buttons. */
+
+.channel-item-editing {
+    border-color: var(--color-accent-secondary) !important; /* Gold border */
+    box-shadow: 0 0 10px 3px var(--color-accent-secondary-hover) !important; /* Gold glow */
+    /* We might need to adjust z-index if it conflicts with other elements, but border/shadow should be fine */
+}
+
+/* Match variable item highlight to channel edit highlight */
+.variable-item-editing {
+    border-color: var(--color-accent-secondary) !important; /* Gold border */
+    box-shadow: 0 0 10px 3px var(--color-accent-secondary-hover) !important; /* Gold glow */
+}
+
+/* Controller Status Indicators in Header */
+#controllerStatusContainer {
+    /* Tailwind's ml-auto on the container should push it right. */
+    /* Add any additional wrapper styling if needed */
+}
+
+/* NEW: Ensure the groups within the main list are also flex rows */
+.controller-status-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.25rem; /* space-x-1 equivalent */
+}
+
+/* Controller Slot Indicator Styles */
+.controller-slot-indicator {
+    display: flex; /* Changed to flex */
+    align-items: center;
+    justify-content: center; /* Center content horizontally */
+    padding: 0.3rem 0.6rem; /* Adjusted padding */
+    border: 1px solid var(--color-button-unmapped);
+    border-radius: 0.375rem; /* Tailwind's rounded-md */
+    background-color: var(--color-background-secondary); /* USED ADDED VARIABLE */
+    color: var(--color-text-secondary);
+    min-width: 60px; /* Ensure a minimum width */
+    height: 30px;    /* Fixed height */
+    text-align: center;
+    font-size: 0.75rem; /* Smaller font for ID */
+    line-height: 1; /* Adjust line height */
+    transition: background-color 0.3s, border-color 0.3s;
+}
+
+.controller-slot-indicator.connected {
+    border-color: var(--color-button-active-border); /* USED ADDED VARIABLE */
+    background-color: var(--color-gamepad-bg); /* Slightly different bg for connected */
+    color: var(--color-text-primary);
+}
+
+.controller-slot-indicator.disconnected {
+    border-color: var(--color-button-unmapped); /* Grey border */
+    background-color: var(--color-input-bg); /* Darker for disconnected - REVISED from --color-background-tooltip */
+    color: var(--color-text-muted);
+}
+
+.controller-slot-indicator .slot-id-text {
+    margin-right: 0.4rem; /* Space between text and battery */
+    font-weight: bold;
+}
+
+/* New styles for slot backgrounds */
+.controller-slot-indicator.battery-bg-full {
+    background-color: var(--color-success) !important; /* Green */
+    color: var(--color-matrix-night) !important; /* Base dark text for contrast on this BG */
+    border-color: var(--color-success-hover) !important;
+}
+.controller-slot-indicator.battery-bg-full .slot-id-text,
+.controller-slot-indicator.battery-bg-full .battery-status-text {
+    color: var(--color-matrix-night) !important; /* Explicitly dark text for children */
+}
+
+.controller-slot-indicator.battery-bg-wired { /* Same as full for now, or choose a different color */
+    background-color: var(--color-accent-primary) !important; /* Blue/Purple for wired */
+    color: var(--color-text-primary) !important; /* Base light text */
+    border-color: var(--color-accent-primary-hover) !important;
+}
+.controller-slot-indicator.battery-bg-wired .slot-id-text,
+.controller-slot-indicator.battery-bg-wired .battery-status-text {
+    color: var(--color-text-primary) !important; /* Explicitly light text for children */
+}
+
+.controller-slot-indicator.battery-bg-medium {
+    background-color: var(--color-accent-auxiliary) !important; /* Yellow/Gold */
+    color: var(--color-matrix-night) !important; /* Base dark text for contrast on this BG */
+    border-color: var(--color-accent-auxiliary-hover) !important;
+}
+.controller-slot-indicator.battery-bg-medium .slot-id-text,
+.controller-slot-indicator.battery-bg-medium .battery-status-text {
+    color: var(--color-matrix-night) !important; /* Explicitly dark text for children */
+}
+
+.controller-slot-indicator.battery-bg-low {
+    background-color: var(--color-danger) !important; /* Red */
+    color: var(--color-text-primary) !important; /* Base light text */
+    border-color: var(--color-danger-hover) !important;
+}
+.controller-slot-indicator.battery-bg-low .slot-id-text,
+.controller-slot-indicator.battery-bg-low .battery-status-text {
+    color: var(--color-text-primary) !important; /* Explicitly light text for children */
+}
+
+.controller-slot-indicator.battery-bg-empty {
+    /* background-color: var(--color-panel-bg) !important; */ /* Original dark, like disconnected */
+    animation: blinkRed 1s infinite;
+    color: var(--color-text-primary) !important; /* Base light text */
+    border-color: var(--color-danger-hover) !important;
+}
+.controller-slot-indicator.battery-bg-empty .slot-id-text,
+.controller-slot-indicator.battery-bg-empty .battery-status-text {
+    color: var(--color-text-primary) !important; /* Explicitly light text for children */
+}
+
+.controller-slot-indicator.battery-bg-unknown { /* For XInput when connected but battery is unknown */
+    background-color: var(--color-input-border) !important; /* A neutral grey */
+    color: var(--color-text-secondary) !important; /* Base muted text */
+    border-color: var(--color-panel-border) !important;
+}
+.controller-slot-indicator.battery-bg-unknown .slot-id-text,
+.controller-slot-indicator.battery-bg-unknown .battery-status-text {
+    color: var(--color-text-secondary) !important; /* Explicitly muted text for children */
+}
+
+.controller-slot-indicator.battery-bg-disconnected { /* For XInput when not connected */
+    background-color: var(--color-gamepad-bg) !important; /* Default slot bg */
+    color: var(--color-text-muted) !important; /* Base muted text */
+    border-color: var(--color-button-unmapped) !important;
+}
+.controller-slot-indicator.battery-bg-disconnected .slot-id-text,
+.controller-slot-indicator.battery-bg-disconnected .battery-status-text {
+    color: var(--color-text-muted) !important; /* Explicitly muted text for children */
+}
+
+/* Styles for Pro Controller slots (no battery color) */
+.controller-slot-indicator.battery-bg-pro { /* Connected Pro Controller */
+    background-color: var(--color-success); /* Green for connected Pro controllers */
+    color: var(--color-text-primary) !important; /* Base light text */
+    border-color: var(--color-accent-primary); /* Use accent to show connected */
+}
+.controller-slot-indicator.battery-bg-pro .slot-id-text,
+.controller-slot-indicator.battery-bg-pro .battery-status-text {
+    color: var(--color-text-primary) !important; /* Explicitly light text for children */
+}
+
+.controller-slot-indicator.battery-bg-pro-disconnected { /* Disconnected Pro Controller */
+    background-color: var(--color-background-light); /* Keep this distinct */
+    color: var(--color-text-secondary);
+    opacity: 0.7;
+}
+
+/* Remove bottom border from the main tab navigation container */
+#tabs-navigation {
+    border-bottom-width: 0px;
+}
+
+/* Tab Navigation Styles */
+.tab-btn {
+    padding-left: 1rem; /* px-4 */
+    padding-right: 1rem; /* px-4 */
+    padding-top: 0.5rem; /* py-2 */
+    padding-bottom: 0.5rem; /* py-2 */
+    font-weight: 600; /* font-semibold */
+    color: var(--color-text-secondary); /* Updated to use theme variable */
+    border-bottom-width: 2px;
+    border-bottom-color: transparent;
+    transition-property: color, border-color; /* transition-colors */
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); /* ease-in-out */
+    transition-duration: 150ms;
+    cursor: pointer; /* Added for better UX */
+}
+
+.tab-btn:hover {
+    color: var(--color-text-primary); /* Updated to use theme variable */
+    border-bottom-color: var(--color-input-border); /* Updated to use theme variable */
+}
+
+.tab-btn.active-tab {
+    color: var(--color-accent-primary); /* Updated to use theme variable */
+    border-bottom-color: var(--color-accent-primary); /* Updated to use theme variable */
+}
+
+.tab-pane {
+    padding-top: 0.5rem; /* pt-2 */
+}
+
+/* Ensure the main container allows for content flow */
+.container {
+    /* Ensure it can grow if content is tall */
+}
+
+/* Specific styles for layer buttons (if we keep them visually distinct beyond tab styling) */
+/* These were from the previous layer button implementation, might be redundant or need adjustment */
+.layer-btn {
+    /* Base styling if different from general tab-btn */
+    /* For now, let tab-btn handle it, but if Layer A-D tabs need special flair: */
+    /* @apply px-6 py-2 rounded-md font-medium transition-all duration-150 ease-in-out; */
+}
+
+.layer-active {
+    /* If specific styling for active layer tabs beyond .active-tab is needed */
+    /* @apply bg-blue-600 text-white shadow-lg scale-105; */
+}
+
+.layer-inactive {
+    /* If specific styling for inactive layer tabs beyond .tab-btn is needed */
+    /* @apply bg-gray-600 text-gray-300 hover:bg-gray-500 hover:text-gray-100; */
+}
+
+/* Styles for sticky OSC Channel Edit Panel */
+.sticky-osc-edit-panel {
+    position: sticky;
+    top: 20px; /* Adjust this value for desired spacing from the top */
+    align-self: flex-start; /* Helps if the parent is a flex container; for grid, it's align-self: start; */
+    z-index: 50; /* Ensure it's above other content; Tailwind max is typically z-50 */
+    background-color: var(--color-panel-bg); /* Ensure it has a background */
+    /* Consider adding a border or shadow if it looks 'flat' when sticky */
+    /* border: 1px solid var(--color-panel-border); */
+}
+
+/* ... existing code ... */ 
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: #2d3748; /* bg-gray-800 */
+    padding: 2rem; /* p-8 */
+    border-radius: 0.5rem; /* rounded-lg */
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    width: 90%;
+    max-width: 500px; /* Adjust as needed */
+    color: #e2e8f0; /* text-gray-300 or similar */
+}
+
+.modal-content h3 {
+    color: #f7fafc; /* text-gray-100 */
+}
+
+/* Ensure form elements in modal are visible if they inherit weirdly */
+.modal-content .form-label {
+    color: #a0aec0; /* text-gray-400 or a light color */
+}
+
+.modal-content .form-input-base {
+    background-color: #1a202c; /* bg-gray-900 or a dark input background */
+    color: #e2e8f0; /* text-gray-300 or light text for input */
+    border-color: #4a5568; /* border-gray-600 */
+}
+
+.modal-content .btn-primary {
+    background-color: #4299e1; /* bg-blue-500 */
+    color: white;
+}
+.modal-content .btn-primary:hover {
+    background-color: #2b6cb0; /* bg-blue-700 */
+}
+
+.modal-content .btn-secondary {
+    background-color: #4a5568; /* bg-gray-600 */
+    color: white;
+}
+.modal-content .btn-secondary:hover {
+    background-color: #2d3748; /* bg-gray-700 */
+}
+
+/* ... existing code ... */ 
+
+/* Global Controller Status Bar Styles */
+#global-controller-status-bar {
+    /* Using Tailwind for most layout, can add specifics here if needed */
+    /* Example: min-height: 40px; to ensure it doesn't get too cramped */
+}
+
+/* NEW status-button styles to match controller slots */
+.status-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem 0.8rem; 
+    font-size: 0.8rem; /* Adjusted from 0.75rem */
+    line-height: 1; 
+    font-weight: bold; /* Adjusted from 500 */
+    border-radius: 0.375rem; 
+    border: 1px solid; /* Color from variants */
+    cursor: pointer;
+    transition-property: background-color, border-color, color, box-shadow;
+    transition-timing-function: ease-in-out;
+    transition-duration: 0.15s;
+    text-align: center;
+    height: 2rem; /* Adjusted from 30px (equals 32px) */
+    white-space: nowrap; 
+}
+
+.status-button:focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px var(--color-input-focus-ring); 
+}
+
+.status-button-neutral {
+    background-color: var(--color-input-bg); 
+    border-color: var(--color-input-border); 
+    color: var(--color-text-muted); /* Adjusted from --color-text-secondary */
+}
+.status-button-neutral:hover {
+    background-color: var(--color-panel-border); 
+    border-color: var(--color-input-focus-border);
+    color: var(--color-text-primary);
+}
+.status-button-neutral:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-input-border) 50%, transparent);
+}
+
+.status-button-danger {
+    background-color: var(--color-danger);
+    border-color: var(--color-danger-hover);
+    color: var(--color-text-primary);
+}
+.status-button-danger:hover {
+    background-color: var(--color-danger-hover);
+    border-color: var(--color-danger);
+}
+.status-button-danger:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 40%, transparent);
+}
+
+/* Note: The .btn-small definitions that were here previously are now covered by 
+   the combination of .btn + .btn-sm + color modifiers (.btn-secondary, .btn-danger).
+   The specific .btn-small, .btn-small.btn-secondary, .btn-small.btn-danger rules 
+   have been removed as they are now redundant.
+*/
+
+.status-slot {
+    width: 2rem;  
+    height: 2rem; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem; /* rounded-md */
+    border: 1px solid var(--color-input-border); /* Default border */
+    font-size: 0.8rem; /* Smaller text */
+    font-weight: bold;
+    color: var(--color-text-muted); /* Muted text by default */
+    cursor: default; 
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+    text-align: center;
+}
+
+.status-slot .slot-label {
+    /* The text X0, P1 etc. is directly in .status-slot span in current HTML for XInput */
+}
+
+.xinput-slot {
+    background-color: var(--color-input-bg); /* Using input background for distinction */
+    border-color: var(--color-input-border);     /* Using input border */
+    color: var(--color-text-muted);          /* Muted text for XInput placeholders */
+    /* Consider a slightly different border-radius or an inset shadow for a different feel if needed */
+    /* box-shadow: inset 0 1px 2px rgba(0,0,0,0.2); */
+}
+
+/* JSL Slot Statuses */
+.jsl-slot.jsl-slot-disconnected { 
+    background-color: var(--color-bg-surface);
+    border-color: var(--color-border-subtle);
+    color: var(--color-text-disabled);
+}
+
+.jsl-slot.jsl-slot-connected { 
+    background-color: var(--color-accent-success-dim);
+    border-color: var(--color-accent-success);
+    color: var(--color-text-on-accent);
+}
+
+.jsl-slot.jsl-slot-error { 
+    background-color: var(--color-accent-danger-dim);
+    border-color: var(--color-accent-danger);
+    color: var(--color-text-on-accent);
+}
+
+/* ... rest of existing styles ... */ 
+
+/* Gamepad Visualization Specific Styles */
+/* Ensure the main container has a minimum height if not set by Tailwind/inline */
+.gamepad-visualization-container {
+    min-height: 20rem; /* approx h-80 from Tailwind */
+    /* background-image: url("/static/images/gamepad_outline_placeholder.png"); /* Optional: if you have a guide image */
+    /* background-size: contain; */
+    /* background-repeat: no-repeat; */
+    /* background-position: center; */
+}
+
+/* Common style for all clickable gamepad inputs if not already sufficient */
+.gamepad-input {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50%; /* Default to round buttons, can be overridden */
+    transition: all 0.2s ease-in-out;
+    box-sizing: border-box;
+}
+
+/* Face Buttons (A, B, X, Y), D-Pad, Shoulder, Thumb Clicks */
+/* The existing .button class seems to be for UI buttons, not gamepad buttons.
+   Let's refine the gamepad .button elements.
+   If there's a .button style from line 406 that's for gamepad, we adjust it.
+   Otherwise, this will be the primary style for gamepad buttons.
+*/
+.gamepad-visualization-container .button.gamepad-input { /* Base style for these buttons */
+    width: 28px;
+    height: 28px;
+    background-color: var(--color-input-bg); /* Neutral background for unmapped or base */
+    border: 2px solid var(--color-button-unmapped);
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.gamepad-visualization-container .button.gamepad-input:hover {
+    border-color: var(--color-accent-primary);
+}
+
+.gamepad-visualization-container .button.gamepad-input.mapped {
+    /* This rule can define non-color mapped properties if any, e.g., text color */
+    color: var(--color-text-primary);
+    /* Color properties removed, will be handled by type-specific rules below */
+}
+
+.gamepad-visualization-container .button.gamepad-input.unmapped {
+    background-color: var(--color-input-bg);
+    border-color: var(--color-button-unmapped);
+}
+
+.gamepad-visualization-container .button.gamepad-input.selected {
+    border-color: var(--color-button-selected-border) !important; /* Ensure override */
+    box-shadow: 0 0 10px 3px var(--color-button-selected-shadow);
+    /* animation: selected-energize 1.5s infinite ease-in-out; /* Ensure animation is applied */
+}
+
+
+/* Thumbstick Click specific (if they need to look different, e.g. slightly larger) */
+.gamepad-visualization-container .button.gamepad-input[data-input-id="LEFT_THUMB"],
+.gamepad-visualization-container .button.gamepad-input[data-input-id="RIGHT_THUMB"] {
+    width: 30px;
+    height: 30px;
+    background-color: color-mix(in srgb, var(--color-input-bg) 80%, black); /* Darker for thumbsticks */
+}
+
+/* Stick Components (X/Y axis indicators) */
+.gamepad-visualization-container .stick-component.gamepad-input { /* Base style for stick components */
+    width: 17px; 
+    height: 17px;
+    background-color: var(--color-input-bg);
+    border: 2px solid var(--color-stick-component-unmapped);
+    border-radius: 0.25rem; 
+    color: var(--color-text-secondary);
+}
+
+.gamepad-visualization-container .stick-component.gamepad-input:hover {
+    border-color: var(--color-accent-primary);
+}
+
+.gamepad-visualization-container .stick-component.gamepad-input.mapped {
+    /* Color properties removed, will be handled by type-specific rules below */
+}
+
+.gamepad-visualization-container .stick-component.gamepad-input.unmapped {
+    background-color: var(--color-input-bg);
+    border-color: var(--color-stick-component-unmapped);
+}
+
+.gamepad-visualization-container .stick-component.gamepad-input.selected {
+    border-color: var(--color-stick-component-selected-border) !important;
+    box-shadow: 0 0 8px 2px var(--color-stick-component-selected-shadow);
+}
+
+.stick-component-label {
+    font-size: 0.65rem; /* Small text for X/Y labels */
+    color: var(--color-text-secondary); /* Or other suitable color */
+    pointer-events: none; /* So it doesn't interfere with stick component click */
+    position: absolute; /* Positioning within the stick component */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+.gamepad-visualization-container .stick-component.gamepad-input.selected .stick-component-label {
+    color: var(--color-accent-primary); /* Highlight label on select */
+}
+
+
+/* Triggers (LT, RT) */
+.gamepad-visualization-container .trigger.gamepad-input { /* Base style for triggers */
+    width: 35px;
+    height: 35px;
+    background-color: var(--color-input-bg);
+    border: 2px solid var(--color-trigger-unmapped);
+    border-radius: 0.375rem; 
+    color: var(--color-text-secondary);
+}
+
+.gamepad-visualization-container .trigger.gamepad-input:hover {
+    border-color: var(--color-accent-primary);
+}
+
+.gamepad-visualization-container .trigger.gamepad-input.mapped {
+    /* Color properties removed, will be handled by type-specific rules below */
+}
+
+.gamepad-visualization-container .trigger.gamepad-input.unmapped {
+    background-color: var(--color-input-bg);
+    border-color: var(--color-trigger-unmapped);
+}
+
+.gamepad-visualization-container .trigger.gamepad-input.selected {
+    border-color: var(--color-trigger-selected-border) !important;
+    box-shadow: 0 0 8px 2px var(--color-trigger-selected-shadow);
+}
+
+/* General Label Styling for Gamepad parts (if not fully covered by JS inline styles) */
+.button-label, 
+.trigger-label { /* stick-component-label is styled above */
+    position: absolute;
+    transform: translateX(-50%);
+    left: 50%;
+    bottom: -18px; /* Adjust as needed, slightly less than JS */
+    color: var(--color-text-muted);
+    font-size: 0.65rem; /* Smaller than JS to ensure it fits */
+    text-align: center;
+    pointer-events: none;
+    white-space: nowrap; /* Prevent wrapping for short labels */
+}
+
+/* D-Pad specific styling, if needed to make them look like a D-Pad group */
+/* This is more complex if you want a connected D-Pad visual */
+/* For now, individual button styling from above will apply */
+.gamepad-visualization-container .button.gamepad-input[data-input-id^="DPAD_"] {
+    border-radius: 0.25rem; /* Make D-Pad buttons more square */
+    width: 25px;
+    height: 25px;
+}
+
+/* Ensure the labels within selected elements are also highlighted if desired */
+.gamepad-visualization-container .gamepad-input.selected + .button-label,
+.gamepad-visualization-container .gamepad-input.selected + .trigger-label {
+    color: var(--color-accent-primary);
+    font-weight: bold;
+}
+
+
+/* Motion Controls - Ensure these match the manual selection styles */
+/* This looks like it was manually added so I will just ensure it is consistent */
+/* Gamepad Motion Controls Styling */
+.motion-controls-grid {
+    /* display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; etc. */
+}
+
+.motion-control-item {
+    background-color: var(--color-gamepad-bg);
+    border: 1px solid var(--color-button-unmapped); /* Reverted to var */
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.25rem; 
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px; 
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+    color: var(--color-text-secondary);
+}
+
+.motion-control-item:hover {
+    border-color: var(--color-accent-primary-hover);
+    background-color: var(--color-panel-bg); 
+}
+
+.motion-control-item.mapped {
+    border-color: var(--color-button-mapped);
+    background-color: color-mix(in srgb, var(--color-button-mapped) 20%, var(--color-gamepad-bg));
+}
+
+.motion-control-item.unmapped {
+     border-color: var(--color-button-unmapped); /* Ensure unmapped uses the variable */
+}
+
+.motion-control-item.selected {
+    border-color: var(--color-button-selected-border) !important;
+    box-shadow: 0 0 8px 2px var(--color-button-selected-shadow) !important; /* Ensure this uses the theme variable and important if needed */
+    /* animation: selected-energize 1.5s infinite ease-in-out; */ /* REMOVED animation */
+}
+
+.motion-control-item.active {
+    background-color: color-mix(in srgb, var(--color-input-active-glow) 15%, var(--color-gamepad-bg));
+}
+
+/* Improve text contrast on mapped motion control items */
+/* Renaming .input-mapped-visual to .mapped for consistency if this is the intent */
+.motion-control-item.mapped .motion-label,
+.motion-control-item.mapped .value-display {
+    color: var(--color-text-primary); /* Changed text color for better contrast on mapped items */
+}
+
+.motion-control-item .motion-label {
+    font-size: 0.75rem; 
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+    color: var(--color-text-muted);
+}
+
+.motion-control-item .value-display {
+    font-size: 0.9rem; 
+    font-weight: bold;
+    color: var(--color-text-primary);
+}
+
+/* General active state for any gamepad input during raw input feedback */
+.gamepad-input.active {
+    border: 3px solid var(--color-input-active-glow, gold) !important; /* Thicker gold border, fallback to gold */
+    box-shadow: none !important; /* Remove any glow effect for active state */
+    /* Opacity can be handled here too if desired, or by JS for analog smoothness */
+}
+
+.gamepad-input.inactive {
+    /* opacity: 0.6; /* Example: slightly dim if not active */
+    /* border-color: var(--color-button-unmapped); /* Revert to unmapped border or a default */
+}
+
+/* Gamepad visualization input states */
+.gamepad-input.unmapped {
+    background-color: rgba(107, 114, 128, 0.3); /* Tailwind gray-500 with opacity */
+    border: 1px solid rgb(75, 85, 99); /* Tailwind gray-600 */
+}
+
+.gamepad-input.mapped {
+    /* Default mapped style, can be overridden by specific types below */
+    background-color: rgba(96, 165, 250, 0.3); /* Tailwind blue-400 with opacity */
+    border: 1px solid rgb(59, 130, 246); /* Tailwind blue-600 */
+}
+
+.gamepad-input.selected {
+    border-color: var(--color-button-selected-border) !important; /* CHANGED to theme variable */
+    box-shadow: 0 0 10px 3px var(--color-button-selected-shadow) !important; /* CHANGED to theme variable and consistent style */
+    /* animation: none !important; */ /* Ensure no animation if any other rule tries to apply one */
+}
+
+/* Mapping type specific colors */
+.gamepad-visualization-container .gamepad-input.mapped-osc-channel,
+.motion-control-item.mapped.mapped-osc-channel {
+    background-color: rgba(52, 211, 153, 0.3) !important; /* Tailwind green-400 with opacity */
+    border-color: rgb(16, 185, 129) !important; /* Tailwind green-600 */
+    color: var(--color-text-primary); /* Ensure text is visible */
+}
+
+.gamepad-visualization-container .gamepad-input.mapped-internal-variable,
+.motion-control-item.mapped.mapped-internal-variable {
+    background-color: rgba(251, 146, 60, 0.3) !important; /* Tailwind orange-400 with opacity */
+    border-color: rgb(249, 115, 22) !important;    /* Tailwind orange-600 */
+    color: var(--color-text-primary); /* Ensure text is visible */
+}
+
+.gamepad-visualization-container .gamepad-input.mapped-layer-switch,
+.motion-control-item.mapped.mapped-layer-switch {
+    background-color: rgba(167, 139, 250, 0.3) !important; /* Tailwind purple-400 with opacity */
+    border-color: rgb(124, 58, 237) !important;     /* Tailwind purple-600 */
+    color: var(--color-text-primary); /* Ensure text is visible */
+}
+
+/* Ensure active border color overrides mapped border colors */
+.gamepad-input.mapped-osc-channel.active,
+.gamepad-input.mapped-internal-variable.active,
+.gamepad-input.mapped-layer-switch.active,
+.motion-control-item.mapped.mapped-osc-channel.active,
+.motion-control-item.mapped.mapped-internal-variable.active,
+.motion-control-item.mapped.mapped-layer-switch.active {
+    border-color: var(--color-input-active-glow, gold) !important;
+}
+
+/* Style for select dropdowns to match other input fields */
+.select-default {
+    /* Inherit most styles from .form-input-base */
+    margin-top: 0.25rem; 
+    display: block; 
+    width: 100%; 
+    border-radius: 0.375rem; 
+    background-color: var(--color-input-bg); 
+    border-width: 1px; 
+    border-style: solid; 
+    border-color: var(--color-input-border); 
+    color: var(--color-text-primary); 
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
+    font-size: 0.875rem; 
+    line-height: 1.25rem; 
+    padding: 0.5rem 0.75rem; 
+    -webkit-appearance: none; /* Remove default Safari/Chrome arrow */
+    -moz-appearance: none;    /* Remove default Firefox arrow */
+    appearance: none;         /* Remove default arrow for other browsers */
+    /* Add a custom arrow using a background image or pseudo-element */
+    /* For simplicity, a basic SVG arrow encoded as a data URI */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23A0A0CC' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1.25em 1.25em;
+}
+
+.select-default:focus {
+    border-color: var(--color-input-focus-border); 
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05), 0 0 0 3px var(--color-input-focus-ring); 
+    outline: 2px solid transparent; 
+    outline-offset: 2px;
+} 

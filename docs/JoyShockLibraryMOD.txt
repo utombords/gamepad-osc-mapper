@@ -1,0 +1,54 @@
+# JoyShockLibrary Modification Log
+
+This document outlines the modifications made to the original JoyShockLibrary source code (`JoyShockLibrary.cpp`). The primary goals of these modifications were to improve stability when handling controller disconnections and reconnections, and to adjust specific behaviors like timeout periods.
+
+## Summary of Key Changes:
+
+1.  **Non-Blocking Reconnection in `JslConnectDevices()`:**
+    *   **Original Behavior:** When `JslConnectDevices()` was called and it detected a controller at a path that was previously active (i.e., reusing a `JoyShock` object), it would attempt to `join()` the old polling thread for that controller. If the old thread was stuck or unresponsive (e.g., due to a problematic HID read or an internal hang), this `join()` call would block indefinitely, causing the calling script to freeze.
+    *   **Modification:** The `thread->join()` call was replaced with `thread->detach()`. The old thread is signaled to cancel (`cancel_thread = true`), and its C++ `std::thread` object is deleted. The OS thread is allowed to continue and exit on its own once it processes the cancellation flag.
+    *   **Reason:** To prevent `JslConnectDevices()` from blocking the calling application if an old controller thread is unresponsive. This makes the library more resilient to problematic controller states during rescans or reconnections.
+    *   **Difference:** `JslConnectDevices()` is much less likely to freeze the calling application when dealing with previously connected controllers.
+
+2.  **Refined Controller Object Reuse and Cleanup Logic in `JslConnectDevices()`:**
+    *   **Original Behavior:** The logic for cleaning up an old controller object when a new device was found at the same path (but was determined to be a *different* type of controller) had a flaw. If a controller object was being reused (`isSameController == true`), its thread was correctly handled (detached in our mods). However, a subsequent block of code, intended to clean up a *different* old controller that was being replaced, could incorrectly try to operate on the now `nullptr` thread of the *reused* controller, leading to an access violation (crash).
+    *   **Modification:** The logic within `JslConnectDevices()` that handles device discovery at existing paths was significantly refactored. It now more clearly distinguishes between:
+        *   Reusing an existing `JoyShock` object for the same controller type (detaching its old thread, re-initializing the object).
+        *   Replacing an old, *different* type of controller at the same path with a new one (scheduling the old one for full cleanup by its thread or deleting it directly, then creating a new `JoyShock` object).
+    *   **Reason:** To fix an access violation crash that could occur during controller reconnection or when a new controller appeared at a path previously occupied by a different type of controller. This ensures that thread operations are only performed on valid thread objects and that `JoyShock` objects are correctly managed.
+    *   **Difference:** Improved stability and corrected object lifetime management during complex connect/disconnect/reconnect scenarios, preventing a specific crash.
+
+3.  **Removed Aggressive Re-initialization from `pollIndividualLoop()`:**
+    *   **Original Behavior:** If `hid_read_timeout()` in a controller's polling thread timed out (but hadn't reached the full 10 timeouts yet), the code would attempt to call `jc->init_usb()` or `jc->init_bt()` to try and re-wake or re-initialize the controller from within the polling thread itself. These `init_*` functions could be blocking or take a significant time, potentially stalling the polling thread.
+    *   **Modification:** The calls to `jc->init_usb()` and `jc->init_bt()` from within the `res == 0` (single timeout) block in `pollIndividualLoop()` were removed. The loop now simply counts timeouts.
+    *   **Reason:** To make the individual polling threads less likely to hang due to internal re-initialization attempts. Re-establishment of a connection is now primarily handled by subsequent calls to `JslConnectDevices()`. This contributes to overall stability and predictability.
+    *   **Difference:** Polling threads are simpler and less prone to getting stuck. Controllers that temporarily lose connection might require a call to `JslConnectDevices()` to fully re-initialize, rather than potentially self-recovering within their polling loop.
+
+4.  **Adjusted Controller Timeout Period in `pollIndividualLoop()`:**
+    *   **Original Behavior:** A controller was considered fully timed out if `hid_read_timeout()` (with a 1-second internal timeout) failed 10 consecutive times (i.e., after ~10 seconds of no data).
+    *   **Modification:** The threshold for `numTimeOuts` was changed from `10` to `2`.
+    *   **Reason:** User request to make the library consider a controller timed out more quickly (after ~2 seconds of no data).
+    *   **Difference:** Controllers that become unresponsive will be marked as timed out and their threads will terminate much sooner.
+
+5.  **Enhanced `JslDisconnectAndDisposeAll()`:**
+    *   **Original Behavior:** The function would signal threads to cancel and detach them. It set flags for the threads to delete their `JoyShock` objects.
+    *   **Modification:**
+        *   Added clearing of `_connectCallback` and `_disconnectCallback` function pointers to prevent any further callbacks after shutdown is initiated.
+        *   The loop iterating through `_joyshocks` was made slightly more robust.
+        *   Explicitly added logic to `delete` a `JoyShock* jc` object directly if its `jc->thread` was already `nullptr` when `JslDisconnectAndDisposeAll` was called. This handles cases where a thread might have terminated without cleaning up its associated `JoyShock` object.
+        *   Ensured deinitialization functions (`deinit_usb`, `deinit_ds4_usb`, etc.) are called for each controller before its thread is signaled/detached.
+    *   **Reason:** To make the shutdown process more complete and robust, ensuring all callbacks are cleared and to prevent potential memory leaks if `JoyShock` objects were left undeleted because their threads had already exited or crashed without performing cleanup.
+    *   **Difference:** More thorough cleanup of internal state and resources. Potentially more reliable deinitialization commands sent to controllers (depending on the completeness of the `deinit_*` functions themselves). Reduced risk of memory leaks.
+
+## Build Process Change:
+
+*   To compile the library as a DLL (shared library) for use with `ctypes` in Python, the CMake configuration step should now include the `-DBUILD_SHARED_LIBS=ON` flag:
+    ```bash
+    cmake .. -G "Visual Studio 17 2022" -DBUILD_SHARED_LIBS=ON 
+    ```
+*   **Reason:** The default CMake configuration might build static libraries. Explicitly setting `BUILD_SHARED_LIBS=ON` ensures DLLs are produced.
+
+## Overall Impact:
+
+The modified library should be more stable and less prone to freezing or crashing the calling application, especially when controllers disconnect unexpectedly or during rescans. The timeout for unresponsive controllers is now shorter. The full disconnection logic is more thorough in its cleanup.
+The physical effect of `JslDisconnectAndDisposeAll()` on the controller hardware (e.g., LEDs turning off) is still dependent on the commands implemented within the specific `deinit_*` functions for each controller type and connection method. 

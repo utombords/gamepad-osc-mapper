@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-F-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamepad OSC Mapper</title>
+    <!-- Tailwind CSS via CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="/static/images/favicon.png" type="image/png">
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans">
+
+    <div id="app-container" class="container mx-auto p-4">
+
+            <div id="global-controller-status-bar-content" class="flex items-center justify-end space-x-2">
+                <div class="flex items-center space-x-2 mr-4">
+                    <button id="global-jsl-rescan-button" class="status-button status-button-neutral">Rescan JSL</button>
+                    <button id="global-jsl-disconnect-all-button" class="status-button status-button-danger">Disconnect JSL</button>
+                </div>
+                
+                <!-- Fixed XInput Slots (X0-X3) -->
+                <div id="xinput-slot-0" class="status-slot xinput-slot controller-slot controller-slot-indicator disconnected empty" title="XInput Slot 0">X0: Empty</div>
+                <div id="xinput-slot-1" class="status-slot xinput-slot controller-slot controller-slot-indicator disconnected empty" title="XInput Slot 1">X1: Empty</div>
+                <div id="xinput-slot-2" class="status-slot xinput-slot controller-slot controller-slot-indicator disconnected empty" title="XInput Slot 2">X2: Empty</div>
+                <div id="xinput-slot-3" class="status-slot xinput-slot controller-slot controller-slot-indicator disconnected empty" title="XInput Slot 3">X3: Empty</div>
+                
+                <!-- Primary JSL Slot (P0) - Fixed -->
+                <div id="player-slot-0" class="status-slot player-slot controller-slot controller-slot-indicator disconnected empty" title="Player Slot 0">P0: Empty</div>
+
+                <!-- Container for Dynamic JSL Player Slots (P1-P15) -->
+                <div id="dynamic-jsl-slots-container" class="flex items-center space-x-2">
+                    <!-- P1-P15 JSL slots will be dynamically added here by globalStatusView.js -->
+                </div>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div id="tabs-navigation" class="mb-4 border-b border-gray-700">
+            <nav class="flex space-x-1" aria-label="Tabs">
+                <button data-tab-target="layer-a-tab" class="tab-btn active-tab">Layer A</button>
+                <button data-tab-target="layer-b-tab" class="tab-btn">Layer B</button>
+                <button data-tab-target="layer-c-tab" class="tab-btn">Layer C</button>
+                <button data-tab-target="layer-d-tab" class="tab-btn">Layer D</button>
+                <button data-tab-target="osc-channels-tab" class="tab-btn">OSC Channels</button>
+                <button data-tab-target="variables-tab" class="tab-btn">Variables</button>
+                <button data-tab-target="settings-tab" class="tab-btn">Settings</button>
+                <button data-tab-target="help-tab" class="tab-btn">Help</button>
+            </nav>
+        </div>
+
+        <!-- Tab Content Area -->
+        <main id="tab-content-area">
+
+            <!-- Layer A Tab -->
+            <div id="layer-a-tab" class="tab-pane active-pane">
+                <section class="config-panel">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div id="layer-a-gamepad-view-section" class="md:col-span-1">
+                            <h3 class="panel-subheader">Gamepad (Layer A)</h3>
+                            <div id="gamepad-visualization-layer-a" class="gamepad-visualization-container relative w-full h-80 bg-gray-700/50 rounded-lg overflow-hidden border border-gray-600 shadow-inner">
+                                <!-- Gamepad visualization for Layer A will be dynamically inserted here -->
+                                <p class="text-gray-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 italic">Gamepad (A)</p>
+                            </div>
+                            <div id="motion-controls-grid-layer-a" class="motion-controls-grid grid grid-cols-3 gap-2 mt-2">
+                                <!-- Motion control items will be dynamically inserted here by JS -->
+                            </div>
+                        </div>
+                        <div id="layer-a-input-mapping-section" class="md:col-span-2">
+                            <h3 class="panel-subheader">Input Mapping (Layer A)</h3>
+                            <div id="input-mapping-config-area-a">
+                                <!-- Mapping details for selected input on Layer A will be injected here by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Layer B Tab (similar structure to Layer A) -->
+            <div id="layer-b-tab" class="tab-pane hidden">
+                <section class="config-panel">
+                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div id="layer-b-gamepad-view-section" class="md:col-span-1">
+                            <h3 class="panel-subheader">Gamepad (Layer B)</h3>
+                            <div id="gamepad-visualization-layer-b" class="gamepad-visualization-container relative w-full h-80 bg-gray-700/50 rounded-lg overflow-hidden border border-gray-600 shadow-inner">
+                                <p class="text-gray-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 italic">Gamepad (B)</p>
+                            </div>
+                            <div id="motion-controls-grid-layer-b" class="motion-controls-grid grid grid-cols-3 gap-2 mt-2">
+                                <!-- Motion control items will be dynamically inserted here by JS -->
+                            </div>
+                        </div>
+                        <div id="layer-b-input-mapping-section" class="md:col-span-2">
+                            <h3 class="panel-subheader">Input Mapping (Layer B)</h3>
+                            <div id="input-mapping-config-area-b">
+                                <!-- Mapping details for selected input on Layer B will be injected here by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Layer C Tab (similar structure to Layer A) -->
+            <div id="layer-c-tab" class="tab-pane hidden">
+                <section class="config-panel">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div id="layer-c-gamepad-view-section" class="md:col-span-1">
+                            <h3 class="panel-subheader">Gamepad (Layer C)</h3>
+                            <div id="gamepad-visualization-layer-c" class="gamepad-visualization-container relative w-full h-80 bg-gray-700/50 rounded-lg overflow-hidden border border-gray-600 shadow-inner">
+                                <p class="text-gray-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 italic">Gamepad (C)</p>
+                            </div>
+                            <div id="motion-controls-grid-layer-c" class="motion-controls-grid grid grid-cols-3 gap-2 mt-2">
+                                <!-- Motion control items will be dynamically inserted here by JS -->
+                            </div>
+                        </div>
+                        <div id="layer-c-input-mapping-section" class="md:col-span-2">
+                            <h3 class="panel-subheader">Input Mapping (Layer C)</h3>
+                            <div id="input-mapping-config-area-c">
+                                <!-- Mapping details for selected input on Layer C will be injected here by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Layer D Tab (similar structure to Layer A) -->
+            <div id="layer-d-tab" class="tab-pane hidden">
+                <section class="config-panel">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div id="layer-d-gamepad-view-section" class="md:col-span-1">
+                            <h3 class="panel-subheader">Gamepad (Layer D)</h3>
+                            <div id="gamepad-visualization-layer-d" class="gamepad-visualization-container relative w-full h-80 bg-gray-700/50 rounded-lg overflow-hidden border border-gray-600 shadow-inner">
+                                <p class="text-gray-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 italic">Gamepad (D)</p>
+                            </div>
+                            <div id="motion-controls-grid-layer-d" class="motion-controls-grid grid grid-cols-3 gap-2 mt-2">
+                                <!-- Motion control items will be dynamically inserted here by JS -->
+                            </div>
+                        </div>
+                        <div id="layer-d-input-mapping-section" class="md:col-span-2">
+                            <h3 class="panel-subheader">Input Mapping (Layer D)</h3>
+                            <div id="input-mapping-config-area-d">
+                                <!-- Mapping details for selected input on Layer D will be injected here by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- OSC Channels Tab -->
+            <div id="osc-channels-tab" class="tab-pane hidden">
+                <section class="config-panel">
+                    <div class="flex justify-between items-center mb-3">
+                        <button id="show-add-channel-modal-button" class="btn btn-primary btn-sm">
+                            Add New Channel
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div id="channels-list-area" class="md:col-span-2 space-y-2">
+                            <p class="text-gray-400">OSC Channels list will appear here.</p>
+                            <!-- Channel items will be dynamically added here -->
+                        </div>
+                        <div id="channel-edit-form-container" class="md:col-span-1">
+                            <!-- Channel Edit Panel - hidden by default -->
+                            <div id="channelEditConfig" class="p-4 border border-gray-700 rounded bg-gray-800 shadow-md" style="display: none;">
+                                <h3 class="text-lg font-semibold text-gray-100 mb-3">
+                                    Edit Channel: <span id="selectedChannelLabel" class="selected-indicator-badge">N/A</span>
+                                </h3>
+                                <form id="editChannelForm" class="space-y-3">
+                                    <div>
+                                        <label for="editOscAddress" class="form-label">OSC Address:</label>
+                                        <input type="text" id="editOscAddress" class="form-input-base w-full">
+                                    </div>
+                                    <div>
+                                        <label for="editOscType" class="form-label">OSC Type:</label>
+                                        <select id="editOscType" class="form-input-base w-full select-default">
+                                            <option value="float">Float (0.0 to 1.0)</option>
+                                            <option value="int">Integer (0 to 127)</option>
+                                            <option value="bool">Boolean (0 or 1)</option>
+                                            <option value="string">String</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="editDefault" class="form-label">Default Value:</label>
+                                        <input type="text" id="editDefault" class="form-input-base w-full">
+                                    </div>
+                                    <!-- String Value 1 (Initially hidden, shown for string type) -->
+                                    <div class="form-control-group" id="groupStringValue1" style="display: none;">
+                                        <label for="editStringValue1" class="form-label">String Value 1:</label>
+                                        <input type="text" id="editStringValue1" name="editStringValue1" class="form-input-base w-full">
+                                    </div>
+                                    <!-- String Value 2 (Initially hidden, shown for string type) -->
+                                    <div class="form-control-group" id="groupStringValue2" style="display: none;">
+                                        <label for="editStringValue2" class="form-label">String Value 2:</label>
+                                        <input type="text" id="editStringValue2" name="editStringValue2" class="form-input-base w-full">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label for="editRangeMin" class="form-label">Range Min:</label>
+                                            <input type="text" id="editRangeMin" class="form-input-base w-full">
+                                        </div>
+                                        <div>
+                                            <label for="editRangeMax" class="form-label">Range Max:</label>
+                                            <input type="text" id="editRangeMax" class="form-input-base w-full">
+                                        </div>
+                                    </div>
+                                    <div class="mt-3">
+                                        <h4 class="form-label font-medium text-gray-300">Mapped Inputs:</h4>
+                                        <div id="editChannelMappedInputsContainer" class="text-sm text-gray-400 max-h-64 overflow-y-auto pr-1">
+                                            <em>No inputs mapped to this channel.</em>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 flex justify-end space-x-2">
+                                        <button type="button" id="cancelChannelEditBtnInPanel" class="btn btn-secondary">Cancel</button> 
+                                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Variables Tab -->
+            <div id="variables-tab" class="tab-pane hidden">
+                <section class="config-panel">
+                    <div class="flex justify-between items-center mb-3">
+                        <button id="show-add-variable-modal-button" class="btn btn-primary btn-sm">
+                            Add New Variable
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div id="variables-list-area" class="md:col-span-2 space-y-2">
+                            <p class="text-gray-400">Internal variables list will appear here.</p>
+                            <!-- Variable items will be dynamically added here -->
+                        </div>
+                        <div id="variable-edit-form-container" class="md:col-span-1">
+                            <!-- Variable Edit Panel - hidden by default -->
+                            <div id="variableEditConfig" class="p-4 border border-gray-700 rounded bg-gray-800 shadow-md" style="display: none;">
+                                <h3 class="text-lg font-semibold text-gray-100 mb-3">
+                                    Edit Variable: <span id="selectedVariableLabel" class="selected-indicator-badge">N/A</span>
+                                </h3>
+                                <form id="editVariableForm" class="space-y-3">
+                                    <div>
+                                        <label for="editVariableInitialValue" class="form-label">Initial Value:</label>
+                                        <input type="number" step="any" id="editVariableInitialValue" class="form-input-base w-full">
+                                    </div>
+                                    <div>
+                                        <label for="editVariableMinValue" class="form-label">Min Value (Optional):</label>
+                                        <input type="number" step="any" id="editVariableMinValue" class="form-input-base w-full" placeholder="e.g., 0">
+                                    </div>
+                                    <div>
+                                        <label for="editVariableMaxValue" class="form-label">Max Value (Optional):</label>
+                                        <input type="number" step="any" id="editVariableMaxValue" class="form-input-base w-full" placeholder="e.g., 1">
+                                    </div>
+
+                                    <hr class="border-gray-600 my-4">
+
+                                    <div class="space-y-2">
+                                        <h4 class="text-md font-semibold text-gray-200 mb-1">OSC on Change:</h4>
+                                        <div class="flex items-center">
+                                            <input type="checkbox" id="editVariableSendOscOnChange" class="form-checkbox">
+                                            <label for="editVariableSendOscOnChange" class="ml-2 form-label">Send OSC Message When Value Changes</label>
+                                        </div>
+
+                                        <div id="editVariableOscConfigGroup" class="space-y-3 mt-2 hidden pl-4 border-l-2 border-gray-700">
+                                            <div>
+                                                <label for="editVariableOscAddress" class="form-label">OSC Address:</label>
+                                                <input type="text" id="editVariableOscAddress" class="form-input-base w-full" placeholder="e.g., /variable/myVar">
+                                            </div>
+                                            <div>
+                                                <label for="editVariableOscValueType" class="form-label">OSC Value Type:</label>
+                                                <select id="editVariableOscValueType" class="form-input-base w-full select-default">
+                                                    <option value="float">Float (0.0 to 1.0 default or scaled)</option>
+                                                    <option value="int">Integer</option>
+                                                    <option value="bool">Boolean (True/False)</option>
+                                                    <option value="string">String</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label for="editVariableOscValueContent" class="form-label">OSC Value Content:</label>
+                                                <input type="text" id="editVariableOscValueContent" class="form-input-base w-full" placeholder="e.g., value, normalized_value, 1, true, 'active'">
+                                                <p class="text-xs text-gray-400 mt-1">Use 'value' for current value, 'normalized_value' for 0-1 (if min/max set), or a fixed string/number.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3">
+                                        <h4 class="form-label font-medium text-gray-300">Used by Inputs:</h4>
+                                        <div id="editVariableMappedInputsContainer" class="text-sm text-gray-400 max-h-64 overflow-y-auto pr-1 bg-gray-700/30 p-2 rounded">
+                                            <!-- Mapped inputs will be populated here by JS -->
+                                            <em class="text-gray-500">Loading mapped inputs...</em>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 flex justify-end space-x-2">
+                                        <button type="button" id="cancelVariableEditBtnInPanel" class="btn btn-secondary">Cancel</button>
+                                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings-tab" class="tab-pane hidden">
+                <section class="config-panel">
+                    <div id="settings-forms-area">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <section class="config-panel">
+                                <h3 class="panel-subheader">OSC Server</h3>
+                                <form id="osc-settings-form" class="space-y-3">
+                                    <div>
+                                        <label for="setting-osc-ip" class="block text-sm font-medium text-gray-300">OSC Server IP:</label>
+                                        <input type="text" id="setting-osc-ip" name="setting-osc-ip" class="form-input-base w-full" placeholder="127.0.0.1">
+                                    </div>
+                                    <div>
+                                        <label for="setting-osc-port" class="block text-sm font-medium text-gray-300">OSC Server Port:</label>
+                                        <input type="number" id="setting-osc-port" name="setting-osc-port" class="form-input-base w-full" placeholder="9000">
+                                    </div>
+                                    <div>
+                                        <label for="setting-osc-updates" class="block text-sm font-medium text-gray-300">Max Updates/sec:</label>
+                                        <input type="number" id="setting-osc-updates" name="setting-osc-updates" class="form-input-base w-full" placeholder="60">
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input type="checkbox" id="setting-osc-use-bundles" name="setting-osc-use-bundles" class="form-checkbox">
+                                        <label for="setting-osc-use-bundles" class="ml-2 block text-sm font-medium text-gray-300">Use OSC Bundles</label>
+                                    </div>
+                                    <div>
+                                        <label for="setting-osc-local-bind-ip" class="block text-sm font-medium text-gray-300">Local Bind IP (optional):</label>
+                                        <input type="text" id="setting-osc-local-bind-ip" name="setting-osc-local-bind-ip" class="form-input-base w-full" placeholder="e.g., 192.168.1.100">
+                                        <p class="text-xs text-gray-500 mt-1">If set, OSC will send from this interface. Leave empty to let OS choose.</p>
+                                    </div>
+                                    <div class="pt-1">
+                                        <button type="button" id="save-osc-settings-button" class="btn btn-primary w-full">Save OSC Settings</button>
+                                    </div>
+                                </form>
+                            </section>
+
+                            <section class="config-panel">
+                                <h3 class="panel-subheader">Web Server</h3>
+                                <form id="web-settings-form" class="space-y-3">
+                                    <div>
+                                        <label for="setting-web-host" class="block text-sm font-medium text-gray-300">Host/IP:</label>
+                                        <input type="text" id="setting-web-host" name="setting-web-host" class="form-input-base w-full" placeholder="127.0.0.1">
+                                    </div>
+                                    <div>
+                                        <label for="setting-web-port" class="block text-sm font-medium text-gray-300">Port:</label>
+                                        <input type="number" id="setting-web-port" name="setting-web-port" class="form-input-base w-full" placeholder="5000">
+                                    </div>
+                                    <div class="pt-1">
+                                        <button type="button" id="save-web-settings-button" class="btn btn-primary w-full">Save Web Settings</button>
+                                    </div>
+                                    <p class="text-xs text-gray-500">Changes take effect after app restart.</p>
+                                </form>
+                            </section>
+
+                            <section class="config-panel">
+                                <h3 class="panel-subheader">Global Input Settings</h3>
+                                <form id="input-settings-form" class="space-y-3">
+                                    <div>
+                                        <label for="setting-input-stick-deadzone" class="block text-sm font-medium text-gray-300">Stick Deadzone (0.0 - 1.0):</label>
+                                        <input type="number" id="setting-input-stick-deadzone" name="setting-input-stick-deadzone" class="form-input-base w-full" placeholder="0.1" step="0.01" min="0" max="1">
+                                    </div>
+                                    <div>
+                                        <label for="setting-input-trigger-deadzone" class="block text-sm font-medium text-gray-300">Trigger Deadzone (0.0 - 1.0):</label>
+                                        <input type="number" id="setting-input-trigger-deadzone" name="setting-input-trigger-deadzone" class="form-input-base w-full" placeholder="0.05" step="0.01" min="0" max="1">
+                                    </div>
+                                    <div>
+                                        <label for="setting-input-stick-curve" class="block text-sm font-medium text-gray-300">Stick Response Curve:</label>
+                                        <input type="text" id="setting-input-stick-curve" name="setting-input-stick-curve" class="form-input-base w-full" placeholder="linear">
+                                        <p class="text-xs text-gray-500 mt-1">e.g., linear, exponential_1.5, etc. (Validation TBD)</p>
+                                    </div>
+                                    <div>
+                                        <label for="setting-jsl-rescan-interval" class="block text-sm font-medium text-gray-300">JSL Rescan Interval (s):</label>
+                                        <input type="number" id="setting-jsl-rescan-interval" name="jsl-rescan-interval" class="form-input-base w-full" value="30.0" step="0.1" min="0.1">
+                                    </div>
+                                    <div class="flex items-center mt-2">
+                                        <input type="checkbox" id="setting-jsl-rescan-polling" name="jsl-rescan-polling" class="form-checkbox" checked>
+                                        <label for="setting-jsl-rescan-polling" class="ml-2 block text-sm font-medium text-gray-300">Enable JSL Rescan Polling</label>
+                                    </div>
+                                    <div class="pt-1">
+                                        <button type="button" id="save-input-settings-button" class="btn btn-primary w-full">Save Input Settings</button>
+                                    </div>
+                                </form>
+                            </section>
+
+                            <section class="config-panel">
+                                <h3 class="panel-subheader">Configuration Files</h3>
+                                <div class="space-y-4">
+                                    <!-- Load Config Section -->
+                                    <div class="p-3 border border-gray-700 rounded">
+                                        <label for="setting-config-list" class="block text-sm font-medium text-gray-300 mb-1">Available Configurations:</label>
+                                        <select id="setting-config-list" name="setting-config-list" class="form-input-base select-default mb-2 w-full">
+                                            <option value="">-- Select a config to load or delete --</option>
+                                            <!-- Options will be populated by JavaScript -->
+                                        </select>
+                                        <div class="flex space-x-2">
+                                            <button type="button" id="load-named-config-button" class="btn btn-secondary flex-grow">Load Selected</button>
+                                            <button type="button" id="delete-named-config-button" class="btn btn-danger flex-grow">Delete Selected</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Save Config Section -->
+                                    <div class="p-3 border border-gray-700 rounded">
+                                        <label for="setting-save-config-name" class="block text-sm font-medium text-gray-300 mb-1">Save Active Configuration As:</label>
+                                        <input type="text" id="setting-save-config-name" name="setting-save-config-name" class="form-input-base w-full mb-2" placeholder="MyNewConfigName">
+                                        <button type="button" id="save-active-config-as-button" class="btn btn-primary w-full">Save Active Config</button>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="config-panel">
+                                <h3 class="panel-subheader">Controller Management</h3>
+                                <div class="space-y-3">
+                                    <button id="jsl-rescan-button" class="btn btn-primary w-full">Rescan Controllers (JSL)</button>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Help Tab -->
+            <div id="help-tab" class="tab-pane hidden">
+                <section class="config-panel">
+                    <h3 class="panel-subheader">Usage Notes</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <section class="config-panel">
+                            <h4 class="text-md font-semibold text-gray-200 mb-2">OSC Addresses & Placeholders</h4>
+                            <ul class="list-disc list-inside text-details-sm space-y-1">
+                                <li>Channel addresses support placeholders: <code>{var}</code> (variable name) and <code>{value}</code> (current value).</li>
+                                <li>Example: <code>/avatar/param/{var}</code> or <code>/slider/{value}</code>.</li>
+                                <li>Variable “On Change” can send a custom address and value type/content.</li>
+                            </ul>
+                        </section>
+                        <section class="config-panel">
+                            <h4 class="text-md font-semibold text-gray-200 mb-2">Mapping Modes (runtime)</h4>
+                            <ul class="list-disc list-inside text-details-sm space-y-1">
+                                <li><b>Direct</b>: maps input to channel range. Buttons/triggers are 0–1; sticks/IMU are −1–1.</li>
+                                <li><b>Rate</b>: sends input × multiplier while moving; idles when stable.</li>
+                                <li><b>Toggle</b>: switches between channel Min/Max on press.</li>
+                                <li><b>Step</b>: adds/subtracts the multiplier on press; clamped to Min/Max.</li>
+                                <li><b>Reset</b>: sets channel to its Default value.</li>
+                                <li><b>Layer Switch</b>: activates the selected layer while held (defaults to “Save to ALL Layers”).</li>
+                            </ul>
+                        </section>
+                        <section class="config-panel">
+                            <h4 class="text-md font-semibold text-gray-200 mb-2">Channel Types</h4>
+                            <ul class="list-disc list-inside text-details-sm space-y-1">
+                                <li><b>float/int/bool</b>: use Range [Min, Max] and Default for scaling and resets.</li>
+                                <li><b>string</b>: configure two strings; mappings select between them (e.g., toggle).</li>
+                                <li>UI shows live values; string channels display the active string label.</li>
+                            </ul>
+                        </section>
+                        <section class="config-panel">
+                            <h4 class="text-md font-semibold text-gray-200 mb-2">Variables</h4>
+                            <ul class="list-disc list-inside text-details-sm space-y-1">
+                                <li>Values clamp to optional Min/Max. “Step” uses the multiplier per press.</li>
+                                <li>Use variables in addresses/value strings via <code>{var}</code>/<code>{value}</code>.</li>
+                                <li>“On Change” can send an OSC message (address, type, content).</li>
+                            </ul>
+                        </section>
+                        <section class="config-panel">
+                            <h4 class="text-md font-semibold text-gray-200 mb-2">Controllers: XInput & JSL</h4>
+                            <ul class="list-disc list-inside text-details-sm space-y-1">
+                                <li><b>XInput</b>: Xbox-compatible controllers. No IMU. Up to 4 slots (X0–X3). Sticks are −1–1, triggers 0–1. Deadzones/curve in Settings.</li>
+                                <li><b>JSL</b>: JoyShockLibrary devices (DualShock 4, DualSense, Switch Pro, Joy‑Con). IMU exposed as ACCEL_/GYRO_ axes when available.</li>
+                                <li>All devices are normalized to generic inputs (A/B/X/Y, shoulders, triggers, sticks, DPAD, ACCEL_/GYRO_). Mappings work across devices.</li>
+                                <li>Use the status bar to rescan/disconnect JSL devices. Third‑party clones that identify as these usually work.</li>
+                            </ul>
+                        </section>
+                        <section class="config-panel">
+                            <h4 class="text-md font-semibold text-gray-200 mb-2">Rates & Performance</h4>
+                            <ul class="list-disc list-inside text-details-sm space-y-1">
+                                <li>Max send rate is set in Settings → OSC Server → “Max Updates/sec”.</li>
+                                <li>Analog inputs use a short “burst while moving”; digital presses send on change only.</li>
+                                <li>Lower the rate if your OSC target or CPU is saturated.</li>
+                            </ul>
+                        </section>
+                        <section class="config-panel">
+                            <h4 class="text-md font-semibold text-gray-200 mb-2">Files & Settings</h4>
+                            <ul class="list-disc list-inside text-details-sm space-y-1">
+                                <li>Active config lives next to the executable: <code>configs/active_config.json</code>.</li>
+                                <li>Use Settings → Configuration Files to save/load named presets.</li>
+                                <li>Web Server (host/port) and OSC Server (ip/port/rate) are editable in Settings.</li>
+                                <li>Web Server changes require app restart to take effect.</li>
+                            </ul>
+                        </section>
+                        <section class="config-panel md:col-span-2">
+                            <h4 class="text-md font-semibold text-gray-200 mb-2">Troubleshooting</h4>
+                            <ul class="list-disc list-inside text-details-sm space-y-1">
+                                <li>No OSC: verify target IP/port, your OSC app’s listener, and firewall.</li>
+                                <li>No input: check the header status; try “Rescan Controllers”.</li>
+                                <li>Unexpected values: confirm channel Range/Default and mapping mode.</li>
+                            </ul>
+                        </section>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Add Channel Modal -->
+        <div id="addChannelModal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h3 class="text-lg font-semibold mb-4">Add New OSC Channel</h3>
+                <form id="addChannelForm">
+                    <div>
+                        <label for="newChannelNameInput" class="form-label">Channel Name:</label>
+                        <input type="text" id="newChannelNameInput" class="form-input-base w-full" placeholder="e.g., my_slider_x">
+                        <p id="newChannelNameError" class="text-red-500 text-sm mt-1" style="display: none;"></p>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" id="cancelAddChannelBtn" class="btn btn-secondary">Cancel</button>
+                        <button type="submit" id="confirmAddChannelBtn" class="btn btn-primary">Add Channel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Variable Modal -->
+        <div id="addVariableModal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h3 class="text-lg font-semibold mb-4">Add New Internal Variable</h3>
+                <form id="addVariableForm">
+                    <div>
+                        <label for="newVariableNameInput" class="form-label">Variable Name:</label>
+                        <input type="text" id="newVariableNameInput" class="form-input-base w-full" placeholder="e.g., my_custom_flag">
+                        <p id="newVariableNameError" class="text-red-500 text-sm mt-1" style="display: none;"></p>
+                    </div>
+                    <div class="mt-6 flex justify-end space-x-3">
+                        <button type="button" id="cancelAddVariableBtn" class="btn btn-secondary">Cancel</button>
+                        <button type="submit" id="confirmAddVariableBtn" class="btn btn-primary">Add Variable</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/socketManager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/appLogger.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/configManager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/uiManager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/settingsView.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/globalStatusView.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/channelManager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/variableManager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/inputMappingView.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/mainApp.js') }}"></script>
+    <!-- Other JS modules will be added here later, e.g.: -->
+    <!-- <script src="{{ url_for('static', filename='js/settingsView.js') }}"></script> -->
+    <!-- ... etc. -->
+</body>
+</html> 
