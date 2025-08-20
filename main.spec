@@ -36,11 +36,15 @@ datas = [
 ]
 
 # Collect binary files (DLLs, etc.)
-binaries = [
-    (os.path.join(project_root, 'app/lib/JoyShockLibrary.dll'), '.'),
-    (os.path.join(project_root, 'app/lib/hidapi.dll'), '.'),
-    # Add other DLLs if XInput-Python or other libs require them and don't bundle automatically
+# Collect binary files (DLLs, etc.). Include only if present to keep CI builds green.
+binaries = []
+_dll_candidates = [
+    os.path.join(project_root, 'app', 'lib', 'JoyShockLibrary.dll'),
+    os.path.join(project_root, 'app', 'lib', 'hidapi.dll'),
 ]
+for _dll in _dll_candidates:
+    if os.path.exists(_dll):
+        binaries.append((_dll, '.'))
 
 # Hidden imports that PyInstaller might miss
 # Include Engine.IO threading driver for Flask-SocketIO in frozen builds
