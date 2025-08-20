@@ -28,49 +28,7 @@ jobs:
       - name: Build artifacts
         run: |
           pyinstaller --clean --noconfirm main.spec
-      - name: Import code-signing certificate
-        if: ${{ env.CERT_PFX_B64 != '' && env.CERT_PASSWORD != '' }}
-        shell: pwsh
-        run: |
-          $bytes = [Convert]::FromBase64String($env:CERT_PFX_B64)
-          [IO.File]::WriteAllBytes('dist/cert.pfx', $bytes)
-          echo "::notice title=Code Signing::PFX imported to dist/cert.pfx"
-      - name: Code sign artifacts (one-file EXE)
-        if: ${{ env.CERT_PFX_B64 != '' && env.CERT_PASSWORD != '' }}
-        shell: pwsh
-        run: |
-          $signtool = 'signtool'
-          & $signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f dist/cert.pfx /p "$env:CERT_PASSWORD" dist/GamepadOSCMapper.exe
-      - name: Code sign artifacts (one-folder EXE & DLLs)
-        if: ${{ env.CERT_PFX_B64 != '' && env.CERT_PASSWORD != '' }}
-        shell: pwsh
-        run: |
-          if (Test-Path dist/GamepadOSCMapper) {
-            Get-ChildItem -Recurse dist/GamepadOSCMapper -Include *.exe,*.dll | ForEach-Object {
-              signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f dist/cert.pfx /p "$env:CERT_PASSWORD" $_.FullName
-            }
-          }
-      - name: Hash artifact
-        shell: pwsh
-        run: |
-          $hash = Get-FileHash "dist/GamepadOSCMapper.exe" -Algorithm SHA256
-          "$($hash.Hash)  GamepadOSCMapper.exe" | Out-File -Encoding ascii "dist/GamepadOSCMapper.exe.sha256"
-      - name: Create portable ZIP
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist/portable/GamepadOSCMapper | Out-Null
-          Copy-Item -Path dist/GamepadOSCMapper.exe -Destination dist/portable/GamepadOSCMapper/
-          if (Test-Path README.md) { Copy-Item README.md dist/portable/GamepadOSCMapper/ }
-          if (Test-Path LICENSE) { Copy-Item LICENSE dist/portable/GamepadOSCMapper/ }
-          if (Test-Path CHANGELOG.md) { Copy-Item CHANGELOG.md dist/portable/GamepadOSCMapper/ }
-          if (Test-Path THIRD_PARTY_NOTICES.md) { Copy-Item THIRD_PARTY_NOTICES.md dist/portable/GamepadOSCMapper/ }
-          if (Test-Path docs/JoyShockLibraryMOD.txt) { New-Item -ItemType Directory -Force -Path dist/portable/GamepadOSCMapper/docs | Out-Null; Copy-Item docs/JoyShockLibraryMOD.txt dist/portable/GamepadOSCMapper/docs/ }
-          New-Item -ItemType Directory -Force -Path dist/portable/GamepadOSCMapper/configs | Out-Null
-          New-Item -ItemType File -Force -Path dist/portable/GamepadOSCMapper/configs/.keep | Out-Null
-          $zipName = "GamepadOSCMapper-$env:GITHUB_REF_NAME-win64.zip"
-          if ($env:GITHUB_REF_NAME -eq $null -or $env:GITHUB_REF_NAME -eq '') { $zipName = "GamepadOSCMapper-portable-win64.zip" }
-          Compress-Archive -Path dist/portable/GamepadOSCMapper/* -DestinationPath dist/$zipName -Force
-      - name: Zip one-folder artifact
+      - name: Create one-folder ZIP
         if: always()
         shell: pwsh
         run: |
@@ -84,9 +42,6 @@ jobs:
         with:
           name: GamepadOSCMapper-win
           path: |
-            dist/GamepadOSCMapper.exe
-            dist/GamepadOSCMapper.exe.sha256
-            dist/GamepadOSCMapper-*-win64.zip
             dist/GamepadOSCMapper-onefolder-*-win64.zip
 
   release:
@@ -102,9 +57,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/GamepadOSCMapper.exe
-            dist/GamepadOSCMapper.exe.sha256
-            dist/GamepadOSCMapper-*-win64.zip
             dist/GamepadOSCMapper-onefolder-*-win64.zip
           token: ${{ secrets.GITHUB_TOKEN }}
         env:
