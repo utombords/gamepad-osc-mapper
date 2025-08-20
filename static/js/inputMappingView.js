@@ -1023,6 +1023,8 @@ App.InputMappingView = (function() {
         let selectedAction;
         if (targetType === 'internal_variable') {
             selectedAction = 'step_by_multiplier_on_trigger'; // Only one action for internal variables.
+        } else if (targetType === 'layer_switch') {
+            selectedAction = 'activate_layer'; // Fixed action for layer switching
         } else {
             const actionSelect = form.querySelector(`#action-select-${layerId}-${inputId}`);
             selectedAction = actionSelect ? actionSelect.value : '';
