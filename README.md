@@ -1,7 +1,7 @@
 Gamepad OSC Mapper
 ===================
 
-[![Build & Release](https://img.shields.io/github/actions/workflow/status/utombords/gamepad-osc-mapper/release.yml?label=build%20%26%20release)](https://github.com/utombords/gamepad-osc-mapper/actions)
+[![Build & Release](https://img.shields.io/github/actions/workflow/status/utombords/gamepad-osc-mapper/release.yml?branch=main&label=build%20%26%20release)](https://github.com/utombords/gamepad-osc-mapper/actions)
 [![Lint](https://img.shields.io/github/actions/workflow/status/utombords/gamepad-osc-mapper/lint.yml?label=lint)](https://github.com/utombords/gamepad-osc-mapper/actions)
 
 Gamepad OSC Mapper lets you map inputs from XInput (Xbox) and JoyShockLibrary (DualShock/DualSense/Switch) controllers to OSC messages over UDP. Configure mappings in a local web UI, send to any OSC target on your LAN, and tune rate/format precisely.
@@ -20,10 +20,11 @@ Quick start (Windows one‑file)
 2) Place it in a folder you control (it creates `configs/` beside the EXE)
 3) Run the EXE, open the UI at `http://127.0.0.1:5000`
 4) Set OSC target IP/port in Settings → OSC Server
-5) Map inputs in Layer A and test
+5) Add channels in OSC Channels
+6) Map inputs in Layer A and test
 
 Network tips
-- If your target uses broadcast, set IP to your subnet broadcast (e.g., `192.168.1.255`).
+- Sset IP to your subnet broadcast (e.g., `192.168.1.255`).
 - Some receivers do not support OSC bundles: uncheck “Use OSC Bundles” (Settings → OSC Server).
 - If you have multiple NICs, set “Local Bind IP” to your LAN IP so packets leave the correct adapter.
 - Windows Firewall can block outbound UDP for unknown EXEs; allow outbound for the EXE on Private networks.
