@@ -104,16 +104,29 @@ class SioWorker(QtCore.QObject):
             reconnection=True,
             reconnection_attempts=5,
             reconnection_delay=3,
+            logger=True,
+            engineio_logger=True,
         )
         self._register_events()
         try:
             self.log_line.emit("[SIO] Connecting (worker)...")
-            self._sio.connect(
-                url,
-                transports=["polling"],
-                namespaces=["/"],
-                socketio_path="/socket.io",
-            )
+            try:
+                self._sio.connect(
+                    url,
+                    transports=["polling"],
+                    namespaces=["/"],
+                    wait=True,
+                    wait_timeout=10,
+                )
+            except Exception as e1:
+                # Retry without explicit namespaces
+                self.log_line.emit(f"[SIO] Retry connect without namespaces due to: {e1}")
+                self._sio.connect(
+                    url,
+                    transports=["polling"],
+                    wait=True,
+                    wait_timeout=10,
+                )
         except Exception as e:
             self.log_line.emit(f"[SIO] Initial connect attempt error: {e}")
 
