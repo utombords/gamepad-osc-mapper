@@ -90,14 +90,10 @@ class SioClient(QtCore.QObject):
 
     def __init__(self, parent: Optional[QtCore.QObject] = None):
         super().__init__(parent)
-        self._sio = socketio.Client(
-            reconnection=True,
-            reconnection_attempts=5,
-            reconnection_delay=3,
-        )
+        self._sio = None
         self._host = "127.0.0.1"
         self._port = 5000
-        self._register_events()
+        self._create_client()
 
     def _register_events(self):
         @_wrap(self)
@@ -141,6 +137,19 @@ class SioClient(QtCore.QObject):
         self._sio.on('active_config_updated', on_active_config_updated)
         self._sio.on('controller_status_update', on_controller_status_update)
 
+    def _create_client(self):
+        try:
+            if getattr(self, '_sio', None) and getattr(self._sio, 'connected', False):
+                self._sio.disconnect()
+        except Exception:
+            pass
+        self._sio = socketio.Client(
+            reconnection=True,
+            reconnection_attempts=5,
+            reconnection_delay=3,
+        )
+        self._register_events()
+
     def emit_log(self, text: str):
         self.log_line.emit(text)
 
@@ -153,19 +162,13 @@ class SioClient(QtCore.QObject):
         threading.Thread(target=self._connect_bg, args=(url,), daemon=True).start()
 
     def _connect_bg(self, url: str):
-        # Try a few strategies to accommodate different environments/builds
-        strategies = [
-            {"kwargs": {"transports": ["polling"], "namespaces": ["/"], "socketio_path": "/socket.io"}, "label": "polling-only"},
-            {"kwargs": {"namespaces": ["/"], "socketio_path": "/socket.io"}, "label": "default-transports"},
-            {"kwargs": {"transports": ["websocket"], "namespaces": ["/"], "socketio_path": "/socket.io"}, "label": "websocket-only"},
-        ]
-        for strat in strategies:
-            try:
-                self.emit_log(f"[SIO] Connecting ({strat['label']})...")
-                self._sio.connect(url, **strat["kwargs"])  # default namespace '/'
-                return
-            except Exception as e:
-                self.emit_log(f"[SIO] Connect failed ({strat['label']}): {e}")
+        # Single client with auto-reconnect; connect returns immediately and retries in background
+        try:
+            self.emit_log("[SIO] Connecting...")
+            self._sio.connect(url, transports=["polling"], socketio_path="/socket.io")
+        except Exception as e:
+            # Initial attempt may raise; auto-reconnect will continue in background
+            self.emit_log(f"[SIO] Initial connect attempt error: {e}")
 
     def disconnect(self):
         try:
