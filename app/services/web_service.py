@@ -671,7 +671,7 @@ class WebService:
                         # Add any other details globalStatusView might use from xinput_slots[i]
                     }
                 else:
-                    logger.warning(f"XInput {controller_raw_data.get('id')} invalid user_index={user_index}")
+                    logger.debug(f"XInput {controller_raw_data.get('id')} invalid user_index={user_index}")
                     # Optionally, could add it to a generic list if UI can handle more than 4 XInput somehow
             
             elif controller_raw_data.get("source") == "jsl":
@@ -686,7 +686,7 @@ class WebService:
                     # slot_id_display is determined by globalStatusView for JSL P0, P1...
                 })
         
-        logger.debug(f"xinput_slots={xinput_slots_payload}; jsl_count={len(jsl_devices_payload)}")
+        logger.debug(f"controller_summary xinput_occupied={[s.get('occupied') for s in xinput_slots_payload]} jsl_count={len(jsl_devices_payload)}")
         return {
             "xinput_slots": xinput_slots_payload,
             "jsl_devices": jsl_devices_payload,

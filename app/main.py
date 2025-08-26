@@ -45,6 +45,13 @@ def run_server(log_level_name: str | None = None) -> None:
     # Quiet Werkzeug request logs to WARNING to avoid noisy per-request lines
     try:
         logging.getLogger('werkzeug').setLevel(logging.WARNING)
+        # Suppress Socket.IO and Engine.IO INFO logs unless explicitly enabled
+        enable_socketio_logs = os.environ.get('SOCKETIO_LOGGERS', '0') == '1'
+        if not enable_socketio_logs:
+            logging.getLogger('socketio').setLevel(logging.WARNING)
+            logging.getLogger('socketio.server').setLevel(logging.WARNING)
+            logging.getLogger('engineio').setLevel(logging.WARNING)
+            logging.getLogger('engineio.server').setLevel(logging.WARNING)
     except Exception:
         pass
     logger.info(f"Logging level set to: {log_level_name}")

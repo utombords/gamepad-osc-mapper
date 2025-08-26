@@ -2,9 +2,7 @@ import sys
 import os
 import subprocess
 import threading
-import time
 from typing import Optional
-import urllib.request
 
 from PySide6 import QtCore, QtWidgets, QtGui
 import socketio
@@ -55,8 +53,6 @@ class ServerProcessManager(QtCore.QObject):
         new_env = (extra or os.environ).copy()
         # Signal the child process to run the server only (no GUI)
         new_env['GAMEPAD_OSC_RUN_MODE'] = 'server'
-        # Enable verbose Socket.IO/Engine.IO logging on the server subprocess for diagnostics
-        new_env['SOCKETIO_LOGGERS'] = '1'
         return new_env
 
     def stop(self):
@@ -104,8 +100,6 @@ class SioWorker(QtCore.QObject):
             reconnection=True,
             reconnection_attempts=5,
             reconnection_delay=3,
-            logger=True,
-            engineio_logger=True,
         )
         self._register_events()
         try:
@@ -173,10 +167,6 @@ class SioWorker(QtCore.QObject):
             self.disconnected.emit()
 
         @_wrap(self)
-        def on_connect_error(data):
-            self.log_line.emit(f"[SIO] connect_error: {data}")
-
-        @_wrap(self)
         def on_active_config_updated(data):
             self.config_loaded.emit(data)
 
@@ -193,7 +183,6 @@ class SioWorker(QtCore.QObject):
 
         self._sio.on('connect', on_connect)
         self._sio.on('disconnect', on_disconnect)
-        self._sio.on('connect_error', on_connect_error)
         self._sio.on('active_config_updated', on_active_config_updated)
         self._sio.on('controller_status_update', on_controller_status_update)
 
