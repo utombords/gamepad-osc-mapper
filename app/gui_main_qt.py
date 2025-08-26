@@ -54,6 +54,8 @@ class ServerProcessManager(QtCore.QObject):
         new_env = (extra or os.environ).copy()
         # Signal the child process to run the server only (no GUI)
         new_env['GAMEPAD_OSC_RUN_MODE'] = 'server'
+        # Enable verbose Socket.IO/Engine.IO logging on the server subprocess for diagnostics
+        new_env['SOCKETIO_LOGGERS'] = '1'
         return new_env
 
     def stop(self):
@@ -153,9 +155,9 @@ class SioClient(QtCore.QObject):
     def _connect_bg(self, url: str):
         # Try a few strategies to accommodate different environments/builds
         strategies = [
-            {"kwargs": {"transports": ["polling"], "namespaces": ["/"]}, "label": "polling-only"},
-            {"kwargs": {"namespaces": ["/"]}, "label": "default-transports"},
-            {"kwargs": {"transports": ["websocket"], "namespaces": ["/"]}, "label": "websocket-only"},
+            {"kwargs": {"transports": ["polling"], "namespaces": ["/"], "socketio_path": "/socket.io"}, "label": "polling-only"},
+            {"kwargs": {"namespaces": ["/"], "socketio_path": "/socket.io"}, "label": "default-transports"},
+            {"kwargs": {"transports": ["websocket"], "namespaces": ["/"], "socketio_path": "/socket.io"}, "label": "websocket-only"},
         ]
         for strat in strategies:
             try:
