@@ -4,6 +4,7 @@ import subprocess
 import threading
 import time
 from typing import Optional
+import urllib.request
 
 from PySide6 import QtCore, QtWidgets, QtGui
 import socketio
@@ -81,7 +82,114 @@ class ServerProcessManager(QtCore.QObject):
             self.server_output.emit(line.rstrip("\n"))
 
 
+class SioWorker(QtCore.QObject):
+    connected = QtCore.Signal()
+    disconnected = QtCore.Signal()
+    log_line = QtCore.Signal(str)
+    config_loaded = QtCore.Signal(dict)
+    controller_status_summary = QtCore.Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self._sio = None
+
+    @QtCore.Slot(str)
+    def connect_to(self, url: str):
+        try:
+            if self._sio and getattr(self._sio, 'connected', False):
+                self._sio.disconnect()
+        except Exception:
+            pass
+        self._sio = socketio.Client(
+            reconnection=True,
+            reconnection_attempts=5,
+            reconnection_delay=3,
+        )
+        self._register_events()
+        try:
+            self.log_line.emit("[SIO] Connecting (worker)...")
+            self._sio.connect(url, transports=["polling"])  # default namespace '/'
+        except Exception as e:
+            self.log_line.emit(f"[SIO] Initial connect attempt error: {e}")
+
+    @QtCore.Slot()
+    def disconnect(self):
+        try:
+            if self._sio and getattr(self._sio, 'connected', False):
+                self._sio.disconnect()
+        except Exception:
+            pass
+
+    @QtCore.Slot(dict)
+    def send_update_osc_settings(self, payload: dict):
+        try:
+            if self._sio:
+                self._sio.emit('update_osc_settings', payload)
+                self.log_line.emit(f"[SIO] update_osc_settings: {payload}")
+        except Exception as e:
+            self.log_line.emit(f"[SIO] update_osc_settings failed: {e}")
+
+    @QtCore.Slot(dict)
+    def send_update_web_settings(self, payload: dict):
+        try:
+            if self._sio:
+                self._sio.emit('update_web_settings', payload)
+                self.log_line.emit(f"[SIO] update_web_settings: {payload}")
+        except Exception as e:
+            self.log_line.emit(f"[SIO] update_web_settings failed: {e}")
+
+    def _register_events(self):
+        @_wrap(self)
+        def on_connect(*_):
+            self.connected.emit()
+            self.log_line.emit("[SIO] Connected")
+            try:
+                self._sio.emit('get_active_config')
+                self._sio.emit('get_controller_status')
+            except Exception:
+                pass
+
+        @_wrap(self)
+        def on_disconnect(*_):
+            self.log_line.emit("[SIO] Disconnected")
+            self.disconnected.emit()
+
+        @_wrap(self)
+        def on_connect_error(data):
+            self.log_line.emit(f"[SIO] connect_error: {data}")
+
+        @_wrap(self)
+        def on_active_config_updated(data):
+            self.config_loaded.emit(data)
+
+        @_wrap(self)
+        def on_controller_status_update(data):
+            try:
+                xinput = data.get('xinput_slots', [])
+                jsl = data.get('jsl_devices', [])
+                x_count = sum(1 for s in xinput if s and s.get('occupied'))
+                j_count = len(jsl)
+                self.controller_status_summary.emit(f"XInput: {x_count}  |  JSL: {j_count}")
+            except Exception:
+                self.controller_status_summary.emit("-")
+
+        self._sio.on('connect', on_connect)
+        self._sio.on('disconnect', on_disconnect)
+        self._sio.on('connect_error', on_connect_error)
+        self._sio.on('active_config_updated', on_active_config_updated)
+        self._sio.on('controller_status_update', on_controller_status_update)
+
+
 class SioClient(QtCore.QObject):
+    connected = QtCore.Signal()
+    disconnected = QtCore.Signal()
+    log_line = QtCore.Signal(str)
+    config_loaded = QtCore.Signal(dict)
+    controller_status_summary = QtCore.Signal(str)
+    _req_connect = QtCore.Signal(str)
+    _req_disconnect = QtCore.Signal()
+    _req_update_osc = QtCore.Signal(dict)
+    _req_update_web = QtCore.Signal(dict)
     connected = QtCore.Signal()
     disconnected = QtCore.Signal()
     log_line = QtCore.Signal(str)
@@ -90,10 +198,23 @@ class SioClient(QtCore.QObject):
 
     def __init__(self, parent: Optional[QtCore.QObject] = None):
         super().__init__(parent)
-        self._sio = None
         self._host = "127.0.0.1"
         self._port = 5000
-        self._create_client()
+        self._thread = QtCore.QThread(self)
+        self._worker = SioWorker()
+        self._worker.moveToThread(self._thread)
+        # Worker -> UI signals
+        self._worker.connected.connect(self.connected)
+        self._worker.disconnected.connect(self.disconnected)
+        self._worker.log_line.connect(self.log_line)
+        self._worker.config_loaded.connect(self.config_loaded)
+        self._worker.controller_status_summary.connect(self.controller_status_summary)
+        # UI -> Worker control
+        self._req_connect.connect(self._worker.connect_to)
+        self._req_disconnect.connect(self._worker.disconnect)
+        self._req_update_osc.connect(self._worker.send_update_osc_settings)
+        self._req_update_web.connect(self._worker.send_update_web_settings)
+        self._thread.start()
 
     def _register_events(self):
         @_wrap(self)
@@ -138,17 +259,7 @@ class SioClient(QtCore.QObject):
         self._sio.on('controller_status_update', on_controller_status_update)
 
     def _create_client(self):
-        try:
-            if getattr(self, '_sio', None) and getattr(self._sio, 'connected', False):
-                self._sio.disconnect()
-        except Exception:
-            pass
-        self._sio = socketio.Client(
-            reconnection=True,
-            reconnection_attempts=5,
-            reconnection_delay=3,
-        )
-        self._register_events()
+        pass
 
     def emit_log(self, text: str):
         self.log_line.emit(text)
@@ -156,25 +267,14 @@ class SioClient(QtCore.QObject):
     def connect(self, host: str, port: int):
         self._host, self._port = host, port
         url = f"http://{host}:{port}"
-        if getattr(self._sio, 'connected', False):
-            self.emit_log("[SIO] Already connected")
-            return
-        threading.Thread(target=self._connect_bg, args=(url,), daemon=True).start()
+        self.log_line.emit("[SIO] Connect requested")
+        self._req_connect.emit(url)
 
     def _connect_bg(self, url: str):
-        # Single client with auto-reconnect; connect returns immediately and retries in background
-        try:
-            self.emit_log("[SIO] Connecting...")
-            self._sio.connect(url, transports=["polling"], socketio_path="/socket.io")
-        except Exception as e:
-            # Initial attempt may raise; auto-reconnect will continue in background
-            self.emit_log(f"[SIO] Initial connect attempt error: {e}")
+        pass
 
     def disconnect(self):
-        try:
-            self._sio.disconnect()
-        except Exception:
-            pass
+        self._req_disconnect.emit()
 
     def is_connected(self) -> bool:
         try:
@@ -183,18 +283,10 @@ class SioClient(QtCore.QObject):
             return False
 
     def update_osc_settings(self, payload: dict):
-        try:
-            self._sio.emit('update_osc_settings', payload)
-            self.emit_log(f"[SIO] update_osc_settings: {payload}")
-        except Exception as e:
-            self.emit_log(f"[SIO] update_osc_settings failed: {e}")
+        self._req_update_osc.emit(payload)
 
     def update_web_settings(self, payload: dict):
-        try:
-            self._sio.emit('update_web_settings', payload)
-            self.emit_log(f"[SIO] update_web_settings: {payload}")
-        except Exception as e:
-            self.emit_log(f"[SIO] update_web_settings failed: {e}")
+        self._req_update_web.emit(payload)
 
 
 def _wrap(owner):
