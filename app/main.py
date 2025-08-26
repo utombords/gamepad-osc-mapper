@@ -65,7 +65,13 @@ def run_server(log_level_name: str | None = None) -> None:
     selected_mode = 'threading'
     # Reduce noisy socket logs by default; enable via env SOCKETIO_LOGGERS=1 if needed
     enable_socketio_logs = os.environ.get('SOCKETIO_LOGGERS', '0') == '1'
-    socketio = SocketIO(app, logger=enable_socketio_logs, engineio_logger=enable_socketio_logs, async_mode=selected_mode)
+    socketio = SocketIO(
+        app,
+        logger=enable_socketio_logs,
+        engineio_logger=enable_socketio_logs,
+        async_mode=selected_mode,
+        cors_allowed_origins="*",
+    )
 
     # Initialize Services (Order can matter for dependencies)
     config_service = ConfigService()

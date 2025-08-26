@@ -146,7 +146,7 @@ class SioClient(QtCore.QObject):
 
     def _connect_bg(self, url: str):
         try:
-            self._sio.connect(url, transports=["polling"])
+            self._sio.connect(url, transports=["polling"], namespaces=["/"])
         except Exception as e:
             self.emit_log(f"[SIO] Connect failed: {e}")
 
