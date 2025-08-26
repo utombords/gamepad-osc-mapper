@@ -88,7 +88,12 @@ class SioClient(QtCore.QObject):
 
     def __init__(self, parent: Optional[QtCore.QObject] = None):
         super().__init__(parent)
-        self._sio = socketio.Client(reconnection=True, reconnection_attempts=5, reconnection_delay=3)
+        self._sio = socketio.Client(
+            reconnection=True,
+            reconnection_attempts=5,
+            reconnection_delay=3,
+            transports=["polling"],
+        )
         self._host = "127.0.0.1"
         self._port = 5000
         self._register_events()
