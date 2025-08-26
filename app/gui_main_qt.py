@@ -218,12 +218,14 @@ class SioClient(QtCore.QObject):
         super().__init__(parent)
         self._host = "127.0.0.1"
         self._port = 5000
+        self._connected = False
+        self._connecting = False
         self._thread = QtCore.QThread(self)
         self._worker = SioWorker()
         self._worker.moveToThread(self._thread)
         # Worker -> UI signals
-        self._worker.connected.connect(self.connected)
-        self._worker.disconnected.connect(self.disconnected)
+        self._worker.connected.connect(self._on_worker_connected)
+        self._worker.disconnected.connect(self._on_worker_disconnected)
         self._worker.log_line.connect(self.log_line)
         self._worker.config_loaded.connect(self.config_loaded)
         self._worker.controller_status_summary.connect(self.controller_status_summary)
@@ -285,6 +287,13 @@ class SioClient(QtCore.QObject):
     def connect(self, host: str, port: int):
         self._host, self._port = host, port
         url = f"http://{host}:{port}"
+        if self._connected:
+            self.log_line.emit("[SIO] Already connected")
+            return
+        if self._connecting:
+            self.log_line.emit("[SIO] Already connecting")
+            return
+        self._connecting = True
         self.log_line.emit("[SIO] Connect requested")
         self._req_connect.emit(url)
 
@@ -292,19 +301,30 @@ class SioClient(QtCore.QObject):
         pass
 
     def disconnect(self):
+        self._connecting = False
+        self._connected = False
         self._req_disconnect.emit()
 
     def is_connected(self) -> bool:
-        try:
-            return bool(getattr(self._sio, 'connected', False))
-        except Exception:
-            return False
+        return bool(self._connected)
 
     def update_osc_settings(self, payload: dict):
         self._req_update_osc.emit(payload)
 
     def update_web_settings(self, payload: dict):
         self._req_update_web.emit(payload)
+
+    @QtCore.Slot()
+    def _on_worker_connected(self):
+        self._connecting = False
+        self._connected = True
+        self.connected.emit()
+
+    @QtCore.Slot()
+    def _on_worker_disconnected(self):
+        self._connecting = False
+        self._connected = False
+        self.disconnected.emit()
 
 
 def _wrap(owner):
