@@ -145,10 +145,19 @@ class SioClient(QtCore.QObject):
         threading.Thread(target=self._connect_bg, args=(url,), daemon=True).start()
 
     def _connect_bg(self, url: str):
-        try:
-            self._sio.connect(url, transports=["polling"], namespaces=["/"])
-        except Exception as e:
-            self.emit_log(f"[SIO] Connect failed: {e}")
+        # Try a few strategies to accommodate different environments/builds
+        strategies = [
+            {"kwargs": {"transports": ["polling"]}, "label": "polling-only"},
+            {"kwargs": {}, "label": "default-transports"},
+            {"kwargs": {"transports": ["websocket"]}, "label": "websocket-only"},
+        ]
+        for strat in strategies:
+            try:
+                self.emit_log(f"[SIO] Connecting ({strat['label']})...")
+                self._sio.connect(url, **strat["kwargs"])  # default namespace '/'
+                return
+            except Exception as e:
+                self.emit_log(f"[SIO] Connect failed ({strat['label']}): {e}")
 
     def disconnect(self):
         try:
