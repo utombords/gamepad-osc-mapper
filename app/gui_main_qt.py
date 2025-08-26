@@ -92,7 +92,6 @@ class SioClient(QtCore.QObject):
             reconnection=True,
             reconnection_attempts=5,
             reconnection_delay=3,
-            transports=["polling"],
         )
         self._host = "127.0.0.1"
         self._port = 5000
@@ -147,7 +146,7 @@ class SioClient(QtCore.QObject):
 
     def _connect_bg(self, url: str):
         try:
-            self._sio.connect(url)
+            self._sio.connect(url, transports=["polling"])
         except Exception as e:
             self.emit_log(f"[SIO] Connect failed: {e}")
 
