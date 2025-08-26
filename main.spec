@@ -16,6 +16,28 @@ def _filter_qt_plugins(items):
         return True
     return [e for e in items if _keep(e)]
 
+# Further prune Qt dynamic libs to only essentials for Widgets apps
+def _prune_qt_binaries(items):
+    allow_keywords = (
+        'qt6core', 'qt6gui', 'qt6widgets',
+        'pyside6', 'shiboken6',
+    )
+    deny_keywords = (
+        'qt63d', 'qt6web', 'qt6qml', 'qt6quick', 'qt6multimedia', 'qt6network',
+        'qt6networkauth', 'qt6positioning', 'qt6sensors', 'qt6serialport', 'qt6bluetooth', 'qt6sql', 'qt6svg',
+    )
+    pruned = []
+    for entry in items:
+        src = entry[0] if isinstance(entry, tuple) else entry
+        name = str(src).lower()
+        if any(bad in name for bad in deny_keywords):
+            continue
+        if ('qt6' in name) and not any(ok in name for ok in allow_keywords):
+            # Drop any other Qt6 libs not explicitly allowed
+            continue
+        pruned.append(entry)
+    return pruned
+
 # Shared hidden imports (no Qt) – keep minimal for threading mode
 cli_hidden = [
     'engineio.async_drivers.threading',
@@ -39,6 +61,7 @@ except Exception:
 
 pyside6_datas = _filter_qt_plugins(pyside6_datas)
 pyside6_binaries = _filter_qt_plugins(pyside6_binaries)
+pyside6_binaries = _prune_qt_binaries(pyside6_binaries)
 
 # Shared app data
 shared_datas = [
