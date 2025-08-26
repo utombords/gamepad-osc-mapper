@@ -108,7 +108,12 @@ class SioWorker(QtCore.QObject):
         self._register_events()
         try:
             self.log_line.emit("[SIO] Connecting (worker)...")
-            self._sio.connect(url, transports=["polling"])  # default namespace '/'
+            self._sio.connect(
+                url,
+                transports=["polling"],
+                namespaces=["/"],
+                socketio_path="/socket.io",
+            )
         except Exception as e:
             self.log_line.emit(f"[SIO] Initial connect attempt error: {e}")
 
