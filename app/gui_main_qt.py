@@ -114,6 +114,11 @@ class SioClient(QtCore.QObject):
             self.disconnected.emit()
 
         @_wrap(self)
+        def on_connect_error(data):
+            # Data often includes server-provided reason
+            self.emit_log(f"[SIO] connect_error: {data}")
+
+        @_wrap(self)
         def on_active_config_updated(data):
             self.config_loaded.emit(data)
 
@@ -130,6 +135,7 @@ class SioClient(QtCore.QObject):
 
         self._sio.on('connect', on_connect)
         self._sio.on('disconnect', on_disconnect)
+        self._sio.on('connect_error', on_connect_error)
         self._sio.on('active_config_updated', on_active_config_updated)
         self._sio.on('controller_status_update', on_controller_status_update)
 
@@ -147,9 +153,9 @@ class SioClient(QtCore.QObject):
     def _connect_bg(self, url: str):
         # Try a few strategies to accommodate different environments/builds
         strategies = [
-            {"kwargs": {"transports": ["polling"]}, "label": "polling-only"},
-            {"kwargs": {}, "label": "default-transports"},
-            {"kwargs": {"transports": ["websocket"]}, "label": "websocket-only"},
+            {"kwargs": {"transports": ["polling"], "namespaces": ["/"]}, "label": "polling-only"},
+            {"kwargs": {"namespaces": ["/"]}, "label": "default-transports"},
+            {"kwargs": {"transports": ["websocket"], "namespaces": ["/"]}, "label": "websocket-only"},
         ]
         for strat in strategies:
             try:

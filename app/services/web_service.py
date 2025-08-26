@@ -81,12 +81,17 @@ class WebService:
         def handle_connect(*args):
             sid = request.sid
             logger.info(f'Client connected: {sid[:6]}…')
-            self._emit_active_config_update(target_sid=sid)
+
 
         @self.socketio.on('disconnect')
         def handle_disconnect(*args):
             sid = request.sid
             logger.info(f'Client disconnected: {sid[:6]}…')
+
+        @self.socketio.on_error_default
+        def default_error_handler(e):  # type: ignore[no-redef]
+            # Log any unhandled exception in Socket.IO event handlers
+            logger.error(f"Socket.IO handler error: {e}", exc_info=True)
 
         @self.socketio.on('get_active_config')
         def handle_get_active_config(*args):
