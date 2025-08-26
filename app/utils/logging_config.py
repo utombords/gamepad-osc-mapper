@@ -2,7 +2,8 @@ import logging
 import sys
 
 DEFAULT_LOG_LEVEL = logging.INFO
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s'
+# Concise, readable format
+LOG_FORMAT = '%(asctime)s %(levelname)s %(name)s: %(message)s'
 
 def setup_logging(level=DEFAULT_LOG_LEVEL):
     """Configures basic logging for the application."""

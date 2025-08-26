@@ -27,28 +27,28 @@ class WebService:
         
         self.num_player_slots = 4 # Define the total number of player slots for the UI (primarily for XInput display)
 
-        logger.info("WebService Initialized (with OSCService and InputService references)")
+        logger.info("WebService ready")
         self.register_routes()
         self.register_socketio_events()
         self._register_input_service_listeners() # Register for controller updates
 
     def register_routes(self):
         """Register HTTP routes used by the UI and health checks."""
-        logger.info("WebService: Registering routes")
+        logger.debug("Registering routes")
 
         @self.app.route('/')
         def index():
-            logger.info("Serving index.html")
+            logger.debug("Serving index.html")
             return render_template('index.html')
         
         @self.app.route('/health')
         def health_check():
-            logger.info("Health check endpoint called")
+            logger.debug("Health check endpoint called")
             return "OK", 200
 
         @self.app.route('/api/input-mapping-definitions')
         def get_input_mapping_definitions():
-            logger.info("Serving input_mapping_definitions.json")
+            logger.debug("Serving input_mapping_definitions.json")
             try:
                 # It's better to read the file each time to ensure freshness if it were ever to be hot-reloaded,
                 # though for this use case, it's loaded once by ChannelProcessingService.
@@ -68,36 +68,36 @@ class WebService:
         active_config = self.config_service.get_config()
         if target_sid:
             emit('active_config_updated', active_config, room=target_sid)
-            logger.info(f"Emitted active_config_updated to SID: {target_sid}")
+            logger.debug(f"Emitted active_config_updated to SID: {target_sid}")
         else:
             self.socketio.emit('active_config_updated', active_config)
-            logger.info("Broadcasted active_config_updated to all clients.")
+            logger.debug("Broadcasted active_config_updated to all clients.")
 
     def register_socketio_events(self):
         """Register all Socket.IO event handlers for settings and mappings."""
-        logger.info("WebService: Registering Socket.IO configuration events")
+        logger.debug("Registering Socket.IO configuration events")
 
         @self.socketio.on('connect')
         def handle_connect(*args):
             sid = request.sid
-            logger.info(f'Client connected: {sid}')
+            logger.info(f'Client connected: {sid[:6]}…')
             self._emit_active_config_update(target_sid=sid)
 
         @self.socketio.on('disconnect')
         def handle_disconnect(*args):
             sid = request.sid
-            logger.info(f'Client disconnected: {sid}')
+            logger.info(f'Client disconnected: {sid[:6]}…')
 
         @self.socketio.on('get_active_config')
         def handle_get_active_config(*args):
             sid = request.sid
-            logger.info(f"Received get_active_config from {sid}")
+            logger.debug(f"get_active_config from {sid[:6]}…")
             self._emit_active_config_update(target_sid=sid)
 
         @self.socketio.on('list_configs')
         def handle_list_configs(*args):
             sid = request.sid
-            logger.info(f"Received list_configs from {sid}")
+            logger.debug(f"list_configs from {sid[:6]}…")
             configs = self.config_service.list_named_configs()
             emit('configs_list', {'configs': configs}, room=sid)
 
@@ -105,7 +105,7 @@ class WebService:
         def handle_load_named_config(data):
             sid = request.sid
             name = data.get('name')
-            logger.info(f"Received load_named_config for '{name}' from {sid}")
+            logger.info(f"load_config: '{name}' from {sid[:6]}…")
             success, message = self.config_service.load_named_config(name)
             if success:
                 self._emit_active_config_update() # Broadcast to all clients
@@ -117,7 +117,7 @@ class WebService:
         def handle_save_active_config_as(data):
             sid = request.sid
             name = data.get('name')
-            logger.info(f"Received save_active_config_as for '{name}' from {sid}")
+            logger.info(f"save_config_as: '{name}' from {sid[:6]}…")
             success, message = self.config_service.save_as_named_config(name)
             emit('config_operation_status', {'success': success, 'message': message, 'action': 'save_as'}, room=sid)
             if success:
@@ -128,7 +128,7 @@ class WebService:
         def handle_delete_named_config(data):
             sid = request.sid
             name = data.get('name')
-            logger.info(f"Received delete_named_config for '{name}' from {sid}")
+            logger.info(f"delete_config: '{name}' from {sid[:6]}…")
             success, message = self.config_service.delete_named_config(name)
             emit('config_operation_status', {'success': success, 'message': message, 'action': 'delete'}, room=sid)
             if success:
@@ -138,7 +138,7 @@ class WebService:
         @self.socketio.on('update_osc_settings')
         def handle_update_osc_settings(data):
             sid = request.sid
-            logger.info(f"Received update_osc_settings with data: {data} from {sid}")
+            logger.info(f"update_osc_settings from {sid[:6]}…")
 
             if data is not None and isinstance(data, dict) and data:
                 success = self.config_service.update_config_section('osc_settings', data)
@@ -147,7 +147,7 @@ class WebService:
                     emit('config_operation_status', {'success': True, 'message': 'OSC settings updated successfully.', 'action': 'update_osc_success'}, room=sid)
                     
                     if self.osc_service:
-                        logger.info("WebService: Notifying OSCService to reload config based on new settings.")
+                        logger.debug("Notify OSCService to reload config")
                         self.osc_service.reload_config()
                     else:
                         logger.warning("WebService: OSCService not available to notify for config reload.")
@@ -160,7 +160,7 @@ class WebService:
         @self.socketio.on('update_input_settings')
         def handle_update_input_settings(data):
             sid = request.sid
-            logger.info(f"Received update_input_settings with data: {data} from {sid}")
+            logger.info(f"update_input_settings from {sid[:6]}…")
 
             if data is not None and isinstance(data, dict) and data:
                 success = self.config_service.update_config_section('input_settings', data)
@@ -173,7 +173,7 @@ class WebService:
                     }, room=sid)
                     
                     if self.input_service:
-                        logger.info("WebService: Notifying InputService to reload config.")
+                        logger.debug("Notify InputService to reload config")
                         self.input_service.reload_config(data) # Pass the new input_settings directly
                     else:
                         logger.warning("WebService: InputService not available to notify for config reload.")
@@ -194,7 +194,7 @@ class WebService:
         @self.socketio.on('update_web_settings')
         def handle_update_web_settings(data):
             sid = request.sid
-            logger.info(f"Received update_web_settings with data: {data} from {sid}")
+            logger.info(f"update_web_settings from {sid[:6]}…")
 
             if data is not None and isinstance(data, dict) and data:
                 host = data.get('host')
@@ -225,7 +225,7 @@ class WebService:
             variable_name = data.get('name')
             variable_properties = data 
             sid = request.sid
-            self.logger.info(f"WebService: Received add_variable event from SID {sid}: Name: {variable_name}, Properties: {variable_properties}")
+            self.logger.info(f"add_variable: '{variable_name}' from {sid[:6]}…")
             if not variable_name:
                 self.logger.error(f"WebService: Invalid data for add_variable from SID {sid}. Name missing.")
                 self.socketio.emit('variable_operation_status', {'success': False, 'message': 'Variable name cannot be empty.'}, room=sid)
@@ -233,7 +233,7 @@ class WebService:
 
             success, message, new_config = self.config_service.add_internal_variable(variable_name, variable_properties)
             if success:
-                self.logger.info(f"WebService: Variable '{variable_name}' added successfully. Broadcasting config update.")
+                self.logger.debug(f"variable added: '{variable_name}'")
                 self.socketio.emit('active_config_updated', new_config)
                 self.socketio.emit('variable_operation_status', {'success': True, 'message': message, 'variable_name': variable_name, 'operation': 'add'}, room=sid)
             else:
@@ -245,7 +245,7 @@ class WebService:
             variable_name = data.get('name')
             variable_data = data.get('data') 
             sid = request.sid
-            self.logger.info(f"WebService: Received update_variable event from SID {sid} for '{variable_name}' with data: {variable_data}")
+            self.logger.info(f"update_variable: '{variable_name}' from {sid[:6]}…")
             if not variable_name or not variable_data or 'initial_value' not in variable_data:
                 self.logger.error(f"WebService: Invalid data for update_variable from SID {sid}. Name or data missing/invalid.")
                 self.socketio.emit('variable_operation_status', {'success': False, 'message': 'Invalid data for variable update.'}, room=sid)
@@ -253,7 +253,7 @@ class WebService:
 
             success, message, new_config = self.config_service.update_internal_variable(variable_name, variable_data)
             if success:
-                self.logger.info(f"WebService: Variable '{variable_name}' updated. Broadcasting config update.")
+                self.logger.debug(f"variable updated: '{variable_name}'")
                 self.socketio.emit('active_config_updated', new_config)
                 self.socketio.emit('variable_operation_status', {'success': True, 'message': message, 'variable_name': variable_name, 'operation': 'update'}, room=sid)
             else:
@@ -264,7 +264,7 @@ class WebService:
         def handle_delete_variable(data, *args):
             variable_name = data.get('name')
             sid = request.sid
-            self.logger.info(f"WebService: Received delete_variable event from SID {sid} for '{variable_name}'")
+            self.logger.info(f"delete_variable: '{variable_name}' from {sid[:6]}…")
             if not variable_name:
                 self.logger.error(f"WebService: Invalid data for delete_variable from SID {sid}. Name missing.")
                 self.socketio.emit('variable_operation_status', {'success': False, 'message': 'Variable name missing.'}, room=sid)
@@ -272,7 +272,7 @@ class WebService:
 
             success, message, new_config = self.config_service.delete_internal_variable(variable_name)
             if success:
-                self.logger.info(f"WebService: Variable '{variable_name}' deleted. Broadcasting config update.")
+                self.logger.debug(f"variable deleted: '{variable_name}'")
                 self.socketio.emit('active_config_updated', new_config)
                 self.socketio.emit('variable_operation_status', {'success': True, 'message': message, 'variable_name': variable_name, 'operation': 'delete'}, room=sid)
             else:
@@ -283,7 +283,7 @@ class WebService:
         def handle_add_channel(data, *args):
             channel_name = data.get('name')
             sid = request.sid
-            self.logger.info(f"WebService: Received add_channel event from SID {sid} for '{channel_name}' with data: {data}")
+            self.logger.info(f"add_channel: '{channel_name}' from {sid[:6]}…")
 
             if not channel_name:
                 self.logger.error(f"WebService: Invalid data for add_channel from SID {sid}. Name missing.")
@@ -295,7 +295,7 @@ class WebService:
             success, message, new_config = self.config_service.add_internal_channel(channel_properties)
 
             if success:
-                self.logger.info(f"WebService: Channel '{channel_name}' added successfully. Broadcasting config update.")
+                self.logger.debug(f"channel added: '{channel_name}'")
                 self.socketio.emit('active_config_updated', new_config) # Broadcast to all
                 self.socketio.emit('channel_operation_status', {'success': True, 'message': message, 'channel_name': channel_name, 'operation': 'add'}, room=sid)
                 if self.osc_service:
@@ -310,7 +310,7 @@ class WebService:
             channel_name = data.get('name')
             channel_data_to_update = data.get('data')
             sid = request.sid
-            self.logger.info(f"WebService: Received update_channel event from SID {sid} for '{channel_name}' with data: {channel_data_to_update}")
+            self.logger.info(f"update_channel: '{channel_name}' from {sid[:6]}…")
 
             if not channel_name or not channel_data_to_update:
                 self.logger.error(f"WebService: Invalid data for update_channel from SID {sid}. Name or data_to_update missing.")
@@ -319,7 +319,7 @@ class WebService:
 
             success, message, new_config = self.config_service.update_internal_channel(channel_name, channel_data_to_update)
             if success:
-                self.logger.info(f"WebService: Channel '{channel_name}' updated. Broadcasting config update.")
+                self.logger.debug(f"channel updated: '{channel_name}'")
                 self.socketio.emit('active_config_updated', new_config) # Broadcast to all
                 self.socketio.emit('channel_operation_status', {'success': True, 'message': message, 'channel_name': channel_name, 'operation': 'update'}, room=sid)
                 if self.osc_service:
@@ -332,7 +332,7 @@ class WebService:
         def handle_delete_channel(data, *args):
             channel_name = data.get('name')
             sid = request.sid
-            self.logger.info(f"WebService: Received delete_channel event from SID {sid} for '{channel_name}'")
+            self.logger.info(f"delete_channel: '{channel_name}' from {sid[:6]}…")
 
             if not channel_name:
                 self.logger.error(f"WebService: Invalid data for delete_channel from SID {sid}. Name missing.")
@@ -341,7 +341,7 @@ class WebService:
 
             success, message, new_config = self.config_service.delete_internal_channel(channel_name)
             if success:
-                self.logger.info(f"WebService: Channel '{channel_name}' deleted. Broadcasting config update.")
+                self.logger.debug(f"channel deleted: '{channel_name}'")
                 self.socketio.emit('active_config_updated', new_config) # Broadcast to all
                 self.socketio.emit('channel_operation_status', {'success': True, 'message': message, 'channel_name': channel_name, 'operation': 'delete'}, room=sid)
                 if self.osc_service:
@@ -359,7 +359,7 @@ class WebService:
             mapping_data = data.get('mapping_data')
             save_to_all_layers = data.get('save_to_all_layers', False)
             
-            self.logger.info(f"WebService: Received update_input_mapping from SID {sid} for Layer: {layer_id}, Input: {input_name}, SaveAll: {save_to_all_layers}, Data: {mapping_data}")
+            self.logger.info(f"update_input_mapping: layer={layer_id} input={input_name} save_all={save_to_all_layers}")
 
             if not all([layer_id, input_name, mapping_data is not None]):
                 self.logger.error(f"WebService: Invalid data for update_input_mapping from SID {sid}. Missing layer_id, input_name, or mapping_data.")
@@ -399,7 +399,7 @@ class WebService:
                     final_config_to_broadcast = new_config
 
             if overall_success:
-                self.logger.info(f"WebService: Input mapping operation successful. Message: {final_message}. Broadcasting config update.")
+                self.logger.debug("input mapping updated")
                 if final_config_to_broadcast: # Ensure there is a config to broadcast
                     self._emit_active_config_update() # Broadcast based on the latest state from ConfigService
                 else: # Should not happen if overall_success is true from a single update
@@ -432,7 +432,7 @@ class WebService:
             input_name = data.get('input_name')
             save_to_all_layers = data.get('save_to_all_layers', False)
 
-            self.logger.info(f"WebService: Received clear_input_mapping from SID {sid} for Layer: {layer_id}, Input: {input_name}, SaveAll: {save_to_all_layers}")
+            self.logger.info(f"clear_input_mapping: layer={layer_id} input={input_name} save_all={save_to_all_layers}")
 
             if not all([layer_id, input_name]):
                 self.logger.error(f"WebService: Invalid data for clear_input_mapping from SID {sid}. Missing layer_id or input_name.")
@@ -492,7 +492,7 @@ class WebService:
                 if final_config_to_broadcast: 
                     self._emit_active_config_update()
                 else: # If all were 'not found' and new_config stayed None, still need to broadcast current state
-                    self.logger.info("WebService: final_config_to_broadcast is None after clear all, likely all mappings were already absent. Broadcasting fresh config.")
+                    self.logger.debug("clear_all: nothing to broadcast; sending fresh config")
                     self._emit_active_config_update()
 
                 emit('mapping_operation_status', {
@@ -520,19 +520,19 @@ class WebService:
         @self.socketio.on('get_controller_status')
         def handle_get_controller_status(*args):
             sid = request.sid
-            logger.info(f"Received get_controller_status from SID: {sid}")
+            logger.debug(f"get_controller_status from {sid[:6]}…")
             self._broadcast_controller_status_update(target_sid=sid)
 
         @self.socketio.on('jsl_rescan_controllers')
         def handle_jsl_rescan_controllers(*args):
             sid = request.sid
-            self.logger.info(f"WebService: Received jsl_rescan_controllers from SID {sid}")
+            self.logger.info("jsl_rescan_controllers")
             if self.input_service:
                 result = self.input_service.jsl_rescan_controllers_action()
                 # InputService already emits jsl_rescan_status if socketio is available to it
                 # We can emit an additional confirmation or rely on InputService's emission.
                 # For now, just log and let InputService handle direct feedback.
-                self.logger.info(f"WebService: jsl_rescan_controllers_action result: {result}")
+                self.logger.debug(f"jsl_rescan result: {result}")
                 # Optionally, emit a more generic ack here if needed, e.g.:
                 # emit('jsl_action_ack', {'action': 'rescan', 'status': result.get('status')}, room=sid)
             else:
@@ -542,11 +542,11 @@ class WebService:
         @self.socketio.on('jsl_disconnect_all_controllers')
         def handle_jsl_disconnect_all_controllers(*args):
             sid = request.sid
-            self.logger.info(f"WebService: Received jsl_disconnect_all_controllers from SID {sid}")
+            self.logger.info("jsl_disconnect_all_controllers")
             if self.input_service:
                 result = self.input_service.jsl_disconnect_all_controllers_action()
                 # Similar to rescan, InputService can handle emitting its own status.
-                self.logger.info(f"WebService: jsl_disconnect_all_controllers_action result: {result}")
+                self.logger.debug(f"jsl_disconnect_all result: {result}")
                 # Optionally, emit an ack:
                 # emit('jsl_action_ack', {'action': 'disconnect_all', 'status': result.get('status')}, room=sid)
             else:
@@ -556,7 +556,7 @@ class WebService:
         @self.socketio.on('jsl_device_update')
         def handle_jsl_device_update(data):
             sid = request.sid
-            logger.info(f"Received jsl_device_update from SID {sid} with data: {data}")
+            logger.debug("jsl_device_update")
             # This is just an example, actual event from InputService/JSLService might be different.
             self.socketio.emit('jsl_device_update', data)
 
@@ -568,7 +568,7 @@ class WebService:
             channel_to_remove = data.get('channel_name') # From the client, this is the channel being untargeted
             currently_editing_channel = data.get('currently_editing_channel') # For context, not directly used in logic here
 
-            self.logger.info(f"WebService: Received clear_specific_mapping from SID {sid} for Layer '{layer_id}', Input '{input_name}', Channel '{channel_to_remove}'. Currently editing: {currently_editing_channel}")
+            self.logger.info(f"clear_specific_mapping: layer={layer_id} input={input_name} channel={channel_to_remove}")
 
             if not all([layer_id, input_name, channel_to_remove]):
                 self.logger.error(f"WebService: Invalid data for clear_specific_mapping from SID {sid}. Missing required fields.")
@@ -598,7 +598,7 @@ class WebService:
                     'action': 'clear_specific_mapping_fail_logic'
                 }, room=sid)
 
-        self.logger.info("WebService: All event handlers registered.") 
+        self.logger.debug("Socket.IO events registered") 
 
     # --- Input Service Listeners --- 
     def _register_input_service_listeners(self):
@@ -607,23 +607,23 @@ class WebService:
             self.input_service.register_connect_listener(self.handle_controller_connect)
             self.input_service.register_disconnect_listener(self.handle_controller_disconnect)
             self.input_service.register_battery_listener(self.handle_battery_update) # Register battery listener
-            logger.info("WebService registered for InputService connect, disconnect, and battery events.")
+            logger.debug("Registered input listeners")
         else:
             logger.warning("WebService: InputService not available, cannot register listeners.")
 
     def handle_controller_connect(self, controller_id, controller_type_str, device_details):
         """Handle a controller connect by broadcasting status to clients."""
-        logger.info(f"WebService: Controller connected event - ID: {controller_id}, Type: {controller_type_str}")
+        logger.info(f"controller_connected: {controller_id} ({controller_type_str})")
         self._broadcast_controller_status_update()
 
     def handle_controller_disconnect(self, controller_id):
         """Handle a controller disconnect by broadcasting status to clients."""
-        logger.info(f"WebService handle_controller_disconnect: Controller disconnected event - ID: {controller_id}. Broadcasting status update.")
+        logger.info(f"controller_disconnected: {controller_id}")
         self._broadcast_controller_status_update()
     
     def handle_battery_update(self, controller_id: str, battery_info: tuple):
         """On battery update, publish updated controller status to clients."""
-        logger.info(f"WebService: Received battery update for {controller_id} - Info: {battery_info}")
+        logger.debug(f"battery_update: {controller_id}")
         self._broadcast_controller_status_update()
 
     def get_current_controller_status_payload(self):
@@ -639,9 +639,9 @@ class WebService:
                 "jsl_devices": [],
                 "active_controllers_count": 0
             }
-        logger.debug("WebService get_current_controller_status_payload: Building payload...")
+        logger.debug("build_controller_status_payload")
         all_connected_raw = self.input_service.get_connected_controllers_status()
-        logger.debug(f"WebService get_current_controller_status_payload: Received all_connected_raw (count {len(all_connected_raw)}): {all_connected_raw}")
+        logger.debug(f"connected_raw_count={len(all_connected_raw)}")
         
         # Initialize xinput_slots payload (for X0-X3)
         xinput_slots_payload = [
@@ -666,7 +666,7 @@ class WebService:
                         # Add any other details globalStatusView might use from xinput_slots[i]
                     }
                 else:
-                    logger.warning(f"XInput controller {controller_raw_data.get('id')} has invalid user_index: {user_index}. Not placing in a fixed slot.")
+                    logger.warning(f"XInput {controller_raw_data.get('id')} invalid user_index={user_index}")
                     # Optionally, could add it to a generic list if UI can handle more than 4 XInput somehow
             
             elif controller_raw_data.get("source") == "jsl":
@@ -681,8 +681,7 @@ class WebService:
                     # slot_id_display is determined by globalStatusView for JSL P0, P1...
                 })
         
-        logger.debug(f"WebService get_current_controller_status_payload: Final xinput_slots_payload: {xinput_slots_payload}")
-        logger.debug(f"WebService get_current_controller_status_payload: Final jsl_devices_payload (count {len(jsl_devices_payload)}): {jsl_devices_payload}")
+        logger.debug(f"xinput_slots={xinput_slots_payload}; jsl_count={len(jsl_devices_payload)}")
         return {
             "xinput_slots": xinput_slots_payload,
             "jsl_devices": jsl_devices_payload,
@@ -703,7 +702,7 @@ class WebService:
         
         if target_sid:
             self.socketio.emit(event_name, payload, room=target_sid)
-            self.logger.info(f"WebService: Emitted {event_name} to SID {target_sid}. Payload summary: {payload_summary}")
+            self.logger.debug(f"emit {event_name} -> {target_sid[:6]}… summary={payload_summary}")
         else:
             self.socketio.emit(event_name, payload)
-            self.logger.info(f"WebService: Broadcasted {event_name}. Payload summary: {payload_summary}") 
+            self.logger.debug(f"broadcast {event_name} summary={payload_summary}")

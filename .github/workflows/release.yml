@@ -28,31 +28,31 @@ jobs:
       - name: Build artifacts
         run: |
           pyinstaller --clean --noconfirm main.spec
-      - name: Create one-folder ZIP
+      - name: Zip GUI onefile
         if: always()
         shell: pwsh
         run: |
-          if (Test-Path dist/GamepadOSCMapper) {
-            $zipName = "GamepadOSCMapper-onefolder-$env:GITHUB_REF_NAME-win64.zip"
-            if ($env:GITHUB_REF_NAME -eq $null -or $env:GITHUB_REF_NAME -eq '') { $zipName = "GamepadOSCMapper-onefolder-win64.zip" }
-            Compress-Archive -Path dist/GamepadOSCMapper/* -DestinationPath dist/$zipName -Force
+          if (Test-Path dist/GamepadOSCMapper-GUI.exe) {
+            $zipName = "GamepadOSCMapper-GUI-$env:GITHUB_REF_NAME-win64.zip"
+            if ($env:GITHUB_REF_NAME -eq $null -or $env:GITHUB_REF_NAME -eq '') { $zipName = "GamepadOSCMapper-GUI-win64.zip" }
+            Compress-Archive -Path dist/GamepadOSCMapper-GUI.exe -DestinationPath dist/$zipName -Force
           }
-      - name: Create one-file ZIP (fat EXE)
+      - name: Zip CLI onefile
         if: always()
         shell: pwsh
         run: |
-          if (Test-Path dist/GamepadOSCMapper_onefile.exe) {
-            $zipName = "GamepadOSCMapper-onefile-$env:GITHUB_REF_NAME-win64.zip"
-            if ($env:GITHUB_REF_NAME -eq $null -or $env:GITHUB_REF_NAME -eq '') { $zipName = "GamepadOSCMapper-onefile-win64.zip" }
-            Compress-Archive -Path dist/GamepadOSCMapper_onefile.exe -DestinationPath dist/$zipName -Force
+          if (Test-Path dist/GamepadOSCMapper-CLI-OneFile.exe) {
+            $zipName = "GamepadOSCMapper-CLI-OneFile-$env:GITHUB_REF_NAME-win64.zip"
+            if ($env:GITHUB_REF_NAME -eq $null -or $env:GITHUB_REF_NAME -eq '') { $zipName = "GamepadOSCMapper-CLI-OneFile-win64.zip" }
+            Compress-Archive -Path dist/GamepadOSCMapper-CLI-OneFile.exe -DestinationPath dist/$zipName -Force
           }
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: GamepadOSCMapper-win
           path: |
-            dist/GamepadOSCMapper-onefolder-*-win64.zip
-            dist/GamepadOSCMapper-onefile-*-win64.zip
+            dist/GamepadOSCMapper-GUI-*-win64.zip
+            dist/GamepadOSCMapper-CLI-OneFile-*-win64.zip
 
   release:
     needs: build-windows
@@ -67,8 +67,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/GamepadOSCMapper-onefolder-*-win64.zip
-            dist/GamepadOSCMapper-onefile-*-win64.zip
+            dist/GamepadOSCMapper-GUI-*-win64.zip
+            dist/GamepadOSCMapper-CLI-OneFile-*-win64.zip
           token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

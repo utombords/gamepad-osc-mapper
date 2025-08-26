@@ -20,7 +20,7 @@ _definitions_path = os.path.join(os.path.dirname(__file__), '..', 'definitions',
 try:
     with open(_definitions_path, 'r') as f:
         RAW_TO_GENERIC_INPUT_MAP = json.load(f)
-    logger.info(f"Successfully loaded input mapping definitions from {_definitions_path}")
+    logger.debug("Loaded input mapping definitions")
 except FileNotFoundError:
     logger.error(f"CRITICAL: Input mapping definitions file not found at {_definitions_path}. Mappings will not work.")
 except json.JSONDecodeError:
@@ -46,7 +46,7 @@ class ChannelProcessingService:
         self.input_service = input_service_instance
         self.socketio = socketio_instance
         self.osc_service = osc_service_instance
-        logger.info("ChannelProcessingService Initialized (with OSCService)")
+        logger.info("ChannelProcessing ready")
         
         self.channel_values = {}
         self.channel_values_lock = threading.Lock()
@@ -83,17 +83,15 @@ class ChannelProcessingService:
 
         if self.input_service:
             self.input_service.register_input_listener(self.handle_input_update)
-            logger.info("ChannelProcessingService registered for input updates.")
+            logger.debug("Registered for input/connect/disconnect events")
             self.input_service.register_connect_listener(self.handle_controller_connect)
-            logger.info("ChannelProcessingService registered for controller connect events.")
             self.input_service.register_disconnect_listener(self.handle_controller_disconnect)
-            logger.info("ChannelProcessingService registered for controller disconnect events.")
         else:
             logger.warning("ChannelProcessingService: InputService instance not provided, cannot register listeners.")
 
         if self.config_service:
             self.config_service.subscribe_to_config_changes(self._handle_config_updated)
-            logger.info("ChannelProcessingService subscribed to configuration changes.")
+            logger.debug("Subscribed to config changes")
         else:
             logger.warning("ChannelProcessingService: ConfigService instance not provided, cannot subscribe to config changes.")
 
@@ -103,7 +101,7 @@ class ChannelProcessingService:
         self._cache_current_layer_mappings()
 
     def _handle_config_updated(self):
-        logger.info("CPS: Configuration updated. Reloading channel states and action details.")
+        logger.info("Config updated -> reload CPS state")
         self._initialize_channel_states()
         # Refresh emit cadence based on updated osc_settings
         self._refresh_emit_cadence_from_config()
@@ -121,7 +119,7 @@ class ChannelProcessingService:
                 max_hz = 240.0
             new_interval = 1.0 / max_hz
             if abs(new_interval - self.channel_update_emit_interval) > 1e-6:
-                logger.info(f"CPS: Updating channel emit interval to {new_interval:.6f}s (~{max_hz:.1f} Hz) from config.")
+                logger.info(f"Cadence: {max_hz:.0f} Hz")
             self.channel_update_emit_interval = new_interval
         except Exception as e:
             logger.warning(f"CPS: Failed to refresh emit cadence from config: {e}. Keeping previous interval {self.channel_update_emit_interval:.6f}s")
@@ -153,7 +151,7 @@ class ChannelProcessingService:
 
     def stop_processing_loop(self):
         """Stop the background processing loop and wait briefly for shutdown."""
-        logger.info("Stopping ChannelProcessingService continuous processing loop...")
+        logger.info("Stop CPS loop")
         self.running = False
         if self.processing_loop_thread and self.processing_loop_thread.is_alive():
             self.processing_loop_thread.join(timeout=1.5)
@@ -162,7 +160,7 @@ class ChannelProcessingService:
             else:
                 logger.debug("Continuous processing loop thread joined.")
         self.processing_loop_thread = None
-        logger.info("ChannelProcessingService continuous processing loop stopped.")
+        logger.debug("CPS loop stopped")
 
     def _cache_current_layer_mappings(self):
         """Cache mappings for the active layer for fast processing in the loop."""
@@ -219,7 +217,7 @@ class ChannelProcessingService:
                 else:
                     self.discrete_action_mappings_for_current_layer[mapped_generic_name] = mapping_config
 
-            logger.info(f"CPS_CACHE_MAPPINGS: Finished for layer '{self.active_layer_id}'. Continuous: {len(self.action_details_for_continuous_processing)}, Discrete: {len(self.discrete_action_mappings_for_current_layer)}")
+            logger.debug(f"Cache layer '{self.active_layer_id}': cont={len(self.action_details_for_continuous_processing)} disc={len(self.discrete_action_mappings_for_current_layer)}")
 
     def _continuous_processing_loop(self):
         """Process continuous actions and emit OSC while running.
@@ -228,7 +226,7 @@ class ChannelProcessingService:
         for active channels, and sends queued OSC messages in bundles.
         """
         loop_interval = 1.0 / self.processing_rate_hz
-        logger.info(f"CPS_LOOP_THREAD: Continuous processing loop THREAD STARTED. Interval: {loop_interval:.4f}s")
+        logger.info(f"CPS loop start @ {loop_interval:.4f}s")
 
         while self.running:
             loop_start_time = time.monotonic()
@@ -427,7 +425,7 @@ class ChannelProcessingService:
             if sleep_duration > 0:
                 time.sleep(sleep_duration)
         
-        logger.info("ChannelProcessingService continuous processing loop has exited.")
+        logger.debug("CPS loop exited")
 
     def _get_generic_input_name(self, raw_input_name):
         """Map a backend-specific input name to a generic ID using definitions."""
@@ -487,13 +485,13 @@ class ChannelProcessingService:
 
     def handle_controller_connect(self, controller_id, controller_type_str, device_details):
         """Handle controller connect event from an input service."""
-        logger.info(f"ChannelProcessingService: Controller connected - ID: {controller_id}, Type: {controller_type_str}")
+        logger.info(f"Controller connected: {controller_id} ({controller_type_str})")
         if controller_id not in self.raw_controller_states:
             self.raw_controller_states[controller_id] = {}
 
     def handle_controller_disconnect(self, controller_id):
         """Handle controller disconnect event and refresh merged state/UI."""
-        logger.info(f"ChannelProcessingService: Controller disconnected - ID: {controller_id}")
+        logger.info(f"Controller disconnected: {controller_id}")
         if controller_id in self.raw_controller_states:
             self.raw_controller_states.pop(controller_id, None)
         
@@ -803,6 +801,6 @@ class ChannelProcessingService:
                 new_channel_values[channel_name] = default_value
 
         self.channel_values = new_channel_values
-        logger.info(f"CPS: Channel states initialized/preserved: {self.channel_values}")
+        logger.debug("Channel states initialized")
 
 

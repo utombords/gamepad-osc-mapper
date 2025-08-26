@@ -182,7 +182,7 @@ class JSLService:
 
         self._initialize_jsl_library()
         self.update_settings(self.main_input_service.input_settings) # Get initial settings
-        self.logger.info(f"JSLService Initialized. JSL available = {self.jsl_available}")
+        self.logger.info(f"JSL ready (available={self.jsl_available})")
 
     def update_settings(self, input_settings: Dict[str, Any]):
         """Apply updated input-related settings relevant to JSL.
@@ -194,7 +194,7 @@ class JSLService:
         """
         self.jsl_rescan_interval_s = abs(float(input_settings.get('jsl_rescan_interval_s', 5.0)))
         if self.jsl_rescan_interval_s == 0: self.jsl_rescan_interval_s = 1
-        self.logger.info(f"JSLService jsl_rescan_interval_s updated to: {self.jsl_rescan_interval_s}s")
+        self.logger.debug(f"jsl_rescan_interval_s={self.jsl_rescan_interval_s}s")
 
         # Read and update jsl_rescan_polling
         raw_rescan_polling = input_settings.get('jsl_rescan_polling', True)
@@ -204,11 +204,11 @@ class JSLService:
             self.jsl_rescan_polling = raw_rescan_polling.lower() == 'true'
         else:
             self.jsl_rescan_polling = True # Default to True if type is unexpected
-        self.logger.info(f"JSLService jsl_rescan_polling updated to: {self.jsl_rescan_polling}")
+        self.logger.debug(f"jsl_rescan_polling={self.jsl_rescan_polling}")
         
         self.polling_rate_hz = abs(float(input_settings.get('polling_rate_hz', 120.0)))
         if self.polling_rate_hz == 0: self.polling_rate_hz = 1.0
-        self.logger.info(f"JSLService polling_rate_hz updated to: {self.polling_rate_hz} Hz")
+        self.logger.debug(f"polling_rate_hz={self.polling_rate_hz}")
 
     def _initialize_jsl_library(self):
         """Load DLL and set up prototypes and callbacks if available."""
@@ -224,7 +224,7 @@ class JSLService:
         """Attempt to load JoyShockLibrary.dll from the expected path."""
         try:
             self.jsl = ctypes.WinDLL(self.jsl_dll_path)
-            self.logger.info(f"JoyShockLibrary.dll loaded successfully from {self.jsl_dll_path}")
+            self.logger.info("JSL DLL loaded")
         except Exception as e:
             self.logger.error(f"Failed to load JoyShockLibrary.dll from {self.jsl_dll_path}: {e}")
             self.jsl = None
@@ -245,7 +245,7 @@ class JSLService:
         try:
             self.jsl.JslDisconnectDevice.argtypes = [ctypes.c_int]
             self.jsl.JslDisconnectDevice.restype = ctypes.c_bool
-            self.logger.info("JslDisconnectDevice function loaded successfully.")
+            self.logger.debug("Loaded JslDisconnectDevice")
         except AttributeError:
             self.logger.warning("JslDisconnectDevice function not found in the loaded JoyShockLibrary.dll.")
 
@@ -273,7 +273,7 @@ class JSLService:
         try:
             self.jsl.JslScanAndConnectNewDevices.argtypes = []
             self.jsl.JslScanAndConnectNewDevices.restype = ctypes.c_int
-            self.logger.info("JslScanAndConnectNewDevices function loaded successfully.")
+            self.logger.debug("Loaded JslScanAndConnectNewDevices")
         except AttributeError:
             self.logger.error("JslScanAndConnectNewDevices function not found in the loaded JoyShockLibrary.dll.")
             def _placeholder_scan_new():
@@ -294,7 +294,7 @@ class JSLService:
         self._jsl_disconnect_cb_ref = DISCONNECT_CALLBACK(self._on_jsl_disconnect_callback_handler)
         self.jsl.JslSetConnectCallback(self._jsl_connect_cb_ref)
         self.jsl.JslSetDisconnectCallback(self._jsl_disconnect_cb_ref)
-        self.logger.info("JSL Connect and Disconnect callbacks registered.")
+        self.logger.debug("JSL callbacks registered")
 
     def _on_jsl_connect_callback_handler(self, handle: int):
         """Handle device connect callback; query type and notify InputService."""
@@ -306,7 +306,7 @@ class JSLService:
                 try:
                     actual_type_enum = self.jsl.JslGetControllerType(handle)
                     type_str = get_jsl_type_string(actual_type_enum)
-                    self.logger.info(f"JSLService _on_jsl_connect_callback_handler: Handle={handle}, JslGetControllerType returned: {actual_type_enum} ('{type_str}')")
+                    self.logger.debug(f"JSL type: handle={handle} type_enum={actual_type_enum} ({type_str})")
                 except Exception as e:
                     self.logger.error(f"JSLService _on_jsl_connect_callback_handler: Error calling JslGetControllerType for handle {handle}: {e}", exc_info=True)
             else:
@@ -316,7 +316,7 @@ class JSLService:
             self.logger.error("JSLService _on_jsl_connect_callback_handler: JSL library not loaded, cannot get controller type.")
 
 
-        self.logger.info(f"JSLService _on_jsl_connect_callback_handler: Notifying main InputService for Handle={handle} with determined TypeEnum={actual_type_enum} ('{type_str}').")
+        self.logger.debug("Notify InputService of JSL connect")
         
         # Pass the type enum obtained from JslGetControllerType to the InputService
         if self.main_input_service and hasattr(self.main_input_service, '_on_jsl_connect'):
@@ -326,7 +326,7 @@ class JSLService:
 
     def _on_jsl_disconnect_callback_handler(self, handle, timed_out):
         """Handle device disconnect callback; enqueue cleanup and notify InputService."""
-        self.logger.info(f"JSLService _on_jsl_disconnect_callback_handler: Handle={handle}, TimedOut={timed_out}. Notifying main InputService.")
+        self.logger.debug(f"JSL disconnect: handle={handle} timed_out={timed_out}")
         if self.main_input_service and hasattr(self.main_input_service, '_on_jsl_disconnect'):
             self.main_input_service._on_jsl_disconnect(handle, timed_out)
         else:
@@ -352,27 +352,27 @@ class JSLService:
         Returns the internal id string (e.g., 'jsl_5') for logging/upstream use.
         """
         internal_jsl_id_str = f"jsl_{handle}"
-        self.logger.info(f"JSLService: Handling JSL disconnect for {internal_jsl_id_str} (Handle: {handle}), Source: {source}")
+        self.logger.info(f"JSL disconnect {internal_jsl_id_str}")
         device_info_lost = None
         already_processed = False
         with self.jsl_devices_lock:
             if handle in self.jsl_devices:
                 device_info_lost = self.jsl_devices.pop(handle, None)
-                self.logger.info(f"JSLService: Popped {internal_jsl_id_str} from self.jsl_devices. Current count: {len(self.jsl_devices)}")
+                self.logger.debug(f"Removed {internal_jsl_id_str}; remaining={len(self.jsl_devices)}")
             else:
                 already_processed = True
             
             if internal_jsl_id_str in self.previous_jsl_states: 
                 del self.previous_jsl_states[internal_jsl_id_str]
-                self.logger.info(f"JSLService: Removed {internal_jsl_id_str} from self.previous_jsl_states.")
+                self.logger.debug(f"Removed prev state for {internal_jsl_id_str}")
 
         if device_info_lost:
-            self.logger.info(f"JSLService: {internal_jsl_id_str} processed for disconnect (source: {source}). Main service will notify listeners.")
+            self.logger.debug(f"Processed disconnect {internal_jsl_id_str}")
             # Notification to main service listeners is handled by the main service itself after calling this.
             return internal_jsl_id_str # Return ID for main service to use for notification
         else:
             if already_processed:
-                self.logger.info(f"JSLService: Disconnect for {internal_jsl_id_str} (Handle: {handle}, Source: {source}) appears to have been processed already.")
+                self.logger.debug(f"Disconnect already processed {internal_jsl_id_str}")
             else:
                 self.logger.warning(f"JSLService: No existing device info found for handle {handle} ({source}) and not marked as already_processed.")
             return internal_jsl_id_str
@@ -384,7 +384,7 @@ class JSLService:
             self._stop_event = threading.Event()
             self.polling_thread = threading.Thread(target=self._jsl_polling_loop, daemon=True)
             self.polling_thread.start()
-            self.logger.info("JSLService polling thread started.")
+            self.logger.info("Start JSL polling")
         elif not self.jsl_available:
             self.logger.warning("JSLService: JSL not available, cannot start polling.")
         else:
@@ -399,19 +399,19 @@ class JSLService:
                 try: self.polling_thread.join(timeout=1.0)
                 except Exception as e: self.logger.error(f"Error joining JSL polling thread: {e}")
                 if self.polling_thread.is_alive(): self.logger.warning("JSL polling thread did not exit cleanly.")
-                else: self.logger.info("JSL polling thread joined.")
+                else: self.logger.debug("JSL polling thread joined")
             self.polling_thread = None
             self._stop_event = None
             if self.jsl and hasattr(self.jsl, 'JslDisconnectAndDisposeAll'):
-                try: self.jsl.JslDisconnectAndDisposeAll(); self.logger.info("JSL DisconnectAndDisposeAll called.")
+                try: self.jsl.JslDisconnectAndDisposeAll(); self.logger.debug("JSL DisconnectAndDisposeAll called")
                 except Exception as e: self.logger.error(f"Error in JslDisconnectAndDisposeAll: {e}")
             with self.jsl_devices_lock: self.jsl_devices.clear(); self.previous_jsl_states.clear()
-            self.logger.info("JSLService polling stopped and resources cleaned up.")
+            self.logger.info("Stop JSL polling")
         else: self.logger.warning("JSLService: Polling not running.")
 
     def _jsl_polling_loop(self):
         """High‑rate polling loop: emit input changes and manage rescans."""
-        self.logger.info("JSLService polling loop started.")
+        self.logger.info("JSL loop start")
         # Schedule an early rescan without blocking the loop
         if self.jsl and hasattr(self.jsl, 'JslScanAndConnectNewDevices'):
             self._schedule_rescan()
@@ -516,7 +516,7 @@ class JSLService:
                 self.logger.debug(f"JSL Polling Loop: Iteration took too long ({elapsed:.6f}s) > interval ({polling_interval:.6f}s).")
                 time.sleep(0.000001) # Minimal sleep to prevent tight loop if processing takes too long
         
-        self.logger.info("JSLService polling loop stopped.")
+        self.logger.debug("JSL loop stopped")
 
     def _schedule_rescan(self):
         """Start a background JSL rescan if one is not already running."""

@@ -282,16 +282,16 @@ class ConfigService:
             # This case should ideally be prevented by frontend validation or a stricter API contract.
             initial_val = variable_properties if isinstance(variable_properties, (int, float)) else 0
             default_variable = {
-                'initial_value': initial_val, # Use the provided or defaulted initial_value
-                'current_value': initial_val, # Current value starts at initial
-                'min_value': variable_properties.get('min_value'), # None if not provided
-                'max_value': variable_properties.get('max_value'), # None if not provided
-                'step_value': variable_properties.get('step_value'), # None if not provided
+                'initial_value': initial_val,  # Use provided or defaulted initial value
+                'current_value': initial_val,  # Current value starts at initial
+                'min_value': None,
+                'max_value': None,
+                'step_value': None,
                 'on_change_osc': {
                     'enabled': False,
-                    'address': f'/internal/variable/{variable_name}', # Default address
+                    'address': f'/internal/variable/{variable_name}',  # Default address
                     'value_type': 'float',
-                    'value_content': 'value' # Send the actual variable value by default
+                    'value_content': 'value'  # Send the actual variable value by default
                 }
             }
         else:

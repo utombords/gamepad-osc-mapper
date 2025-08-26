@@ -29,12 +29,12 @@ class OSCService:
         self.message_queue = []
         self._suppress_var_expanded_channels_until = 0.0
         self._use_bundles = False
-        logger.info("OSCService Initialized")
+        logger.info("OSC ready")
         self._setup_osc_client()
 
     def set_channel_processing_service(self, channel_processing_service_instance):
         self.channel_processing_service = channel_processing_service_instance
-        logger.info("OSCService: ChannelProcessingService instance set.")
+        logger.debug("CPS set")
         # Example: if self.channel_processing_service and self.socketio:
         # self.socketio.emit('status', {'service': 'osc', 'message': 'CPS ready'})
 
@@ -53,7 +53,7 @@ class OSCService:
         allow_broadcast = bool(osc_settings.get('allow_broadcast', broadcast_like))
         try:
             self.osc_client = SimpleUDPClient(ip, port, allow_broadcast=allow_broadcast)
-            logger.info(f"OSC client configured for {ip}:{port} (broadcast={'on' if allow_broadcast else 'off'}).")
+            logger.info(f"OSC {ip}:{port} (broadcast={'on' if allow_broadcast else 'off'})")
             # In python-osc, the UDP client is ready after construction; no explicit connect
             # Optionally bind to a specific local interface to control the NIC used
             local_bind_ip = (osc_settings or {}).get('local_bind_ip')
@@ -64,7 +64,7 @@ class OSCService:
                     if hasattr(self.osc_client, '_sock') and isinstance(self.osc_client._sock, socket.socket):
                         # Bind to requested local interface using ephemeral port
                         self.osc_client._sock.bind((local_bind_ip, 0))
-                        logger.info(f"OSC client bound to local interface {local_bind_ip} for outbound UDP.")
+                        logger.info(f"OSC bind local {local_bind_ip}")
                     else:
                         logger.warning("OSC client socket not accessible for binding; skipping local_bind_ip.")
                 except Exception as bind_err:
@@ -75,7 +75,7 @@ class OSCService:
 
     def reload_config(self):
         """Reload OSC settings and clear any queued messages."""
-        logger.info("OSCService: Reloading OSC configuration.")
+        logger.info("Reload OSC config")
         self._setup_osc_client()
         # Update bundle preference from settings (default: False for compatibility)
         try:

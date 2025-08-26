@@ -80,7 +80,7 @@ class InputService(metaclass=Singleton):
 
         self.reload_config() 
 
-        self.logger.info(f"InputService Initialized. XINPUT_AVAILABLE = {self.xinput_available}. JSL available = {self.jsl_available}. Input settings: {self.input_settings}")
+        self.logger.info(f"InputService ready (XInput={self.xinput_available}, JSL={self.jsl_available})")
         
         self._main_polling_thread: Optional[threading.Thread] = None # Renamed to avoid confusion
         self._main_stop_event: Optional[threading.Event] = None   # Renamed
@@ -94,7 +94,7 @@ class InputService(metaclass=Singleton):
             full_config = self.config_service.get_config()
             self.input_settings = full_config.get('input_settings', {})
         
-        self.logger.info(f"InputService: Configuration reloaded. New input_settings: {self.input_settings}")
+        self.logger.debug(f"InputService config reloaded")
         self.polling_rate_hz = abs(self.input_settings.get('polling_rate_hz', 120))
         if self.polling_rate_hz == 0: 
             self.polling_rate_hz = 1 
@@ -108,25 +108,25 @@ class InputService(metaclass=Singleton):
         """Subscribe a callback(controller_id, input_name, value)."""
         if callback not in self.listeners:
             self.listeners.append(callback)
-            logger.info(f"Input listener {callback.__name__} registered.")
+            logger.debug(f"Input listener registered: {callback.__name__}")
 
     def register_connect_listener(self, callback):
         """Subscribe to controller connect events."""
         if callback not in self.connect_listeners:
             self.connect_listeners.append(callback)
-            logger.info(f"Connect listener {callback.__name__} registered.")
+            logger.debug(f"Connect listener registered: {callback.__name__}")
 
     def register_disconnect_listener(self, callback):
         """Subscribe to controller disconnect events."""
         if callback not in self.disconnect_listeners:
             self.disconnect_listeners.append(callback)
-            logger.info(f"Disconnect listener {callback.__name__} registered.")
+            logger.debug(f"Disconnect listener registered: {callback.__name__}")
 
     def register_battery_listener(self, callback: Callable[[str, Tuple[Optional[str], Optional[str]]], None]):
         """Subscribe to battery info updates for connected controllers."""
         if callback not in self.battery_listeners:
             self.battery_listeners.append(callback)
-            logger.info(f"Battery listener {callback.__name__} registered.")
+            logger.debug(f"Battery listener registered: {callback.__name__}")
 
     def _notify_input_listeners(self, controller_id, input_name, value):
         """Notify registered listeners of a raw input value change."""
@@ -198,7 +198,7 @@ class InputService(metaclass=Singleton):
         """Start polling of available sub-services (JSL, XInput)."""
         if not self.is_running:
             self.is_running = True
-            self.logger.info("InputService: Starting sub-service polling...")
+            self.logger.info("Start input polling")
             if self.jsl_service: self.jsl_service.start_polling()
             if self.xinput_service: self.xinput_service.start_polling()
             if not self.jsl_available and not self.xinput_available: self.logger.warning("InputService: No input sub-systems (JSL, XInput) available to poll.")
@@ -208,10 +208,10 @@ class InputService(metaclass=Singleton):
         """Stop polling of sub-services and cleanly shut down threads."""
         if self.is_running:
             self.is_running = False
-            self.logger.info("InputService: Stopping sub-service polling...")
+            self.logger.info("Stop input polling")
             if self.jsl_service: self.jsl_service.stop_polling()
             if self.xinput_service: self.xinput_service.stop_polling()
-            self.logger.info("InputService stop sequence complete.")
+            self.logger.debug("InputService stopped")
         else: self.logger.warning("InputService: Polling not currently running.")
 
     def _trigger_jsl_rescan_internal(self):
@@ -311,7 +311,7 @@ class InputService(metaclass=Singleton):
         # This method is now called by JSLService._on_jsl_connect_callback_handler
         # with type_enum already determined by JslGetControllerType in JSLService.
 
-        self.logger.info(f"InputService: JSL connect callback processing for handle {handle}, type {type_enum}")
+        self.logger.debug(f"JSL connect: handle={handle} type={type_enum}")
 
         device_id_str = f"jsl_{handle}"
         type_str = "Unknown JSL Device (Callback Validation Pending)"
@@ -327,7 +327,7 @@ class InputService(metaclass=Singleton):
         # Update type_str based on the (now direct) mapped_type_enum.
         # The get_jsl_type_string function is still expected to convert this integer ID to a human-readable string.
         type_str = get_jsl_type_string(mapped_type_enum)
-        self.logger.info(f"InputService: JSL connect: Using JSL type ID {mapped_type_enum} (directly from JSL), resulting type string: '{type_str}' for handle {handle}.")
+        self.logger.info(f"JSL connected {device_id_str} ({type_str})")
 
         device_details_for_notification = {
             "handle": handle,
@@ -353,7 +353,7 @@ class InputService(metaclass=Singleton):
                         device_entry['valid_device'] = True # Assume valid if callback triggered
                         device_entry['error_logged'] = False # Reset error flags
                         device_entry['error_logged_imu'] = False
-                        self.logger.info(f"InputService: Updated jsl_service.jsl_devices for jsl_{handle} ({type_str}) INSIDE LOCK.")
+                        self.logger.debug(f"JSL state updated for jsl_{handle}")
                     else:
                         self.logger.error(f"InputService: _ensure_jsl_device_entry was called for handle {handle} but it's still not in jsl_devices dict INSIDE LOCK.")
             
@@ -380,7 +380,7 @@ class InputService(metaclass=Singleton):
         Called by JSLService's JSL disconnect callback.
         Queues the disconnect event into JSLService's disconnect queue for processing.
         """
-        self.logger.info(f"InputService: JSL disconnect callback for handle {handle}, timed_out {timed_out}, source {source}. Queueing in JSLService.")
+        self.logger.info(f"JSL disconnected jsl_{handle} timed_out={timed_out}")
         if self.jsl_service and hasattr(self.jsl_service, 'jsl_disconnect_queue'):
             self.jsl_service.jsl_disconnect_queue.put({'handle': handle, 'timed_out': timed_out, 'source': source})
         else:

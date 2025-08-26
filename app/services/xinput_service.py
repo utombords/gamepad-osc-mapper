@@ -111,7 +111,7 @@ class XInputService:
         self.XINPUT_RUMBLE_REPETITIONS = XINPUT_RUMBLE_REPETITIONS
 
         self.update_settings(self.main_input_service.input_settings) # Get initial settings
-        self.logger.info(f"XInputService Initialized. XInput available = {self.xinput_available}")
+        self.logger.info(f"XInput ready (available={self.xinput_available})")
 
     def update_settings(self, input_settings: Dict[str, Any]):
         """Apply input settings (deadzones/curve/rates) and configure XInput."""
@@ -127,7 +127,7 @@ class XInputService:
                     # Try to convert other strings if they represent numbers
                     self.deadzone_config.stick_curve = float(stick_curve_setting)
                 except ValueError:
-                    self.logger.warning(f"Invalid string value '{stick_curve_setting}' for stick_curve. Defaulting to 1.0 (linear).")
+                    self.logger.warning(f"stick_curve invalid '{stick_curve_setting}', defaulting to 1.0")
                     self.deadzone_config.stick_curve = 1.0
         elif isinstance(stick_curve_setting, (int, float)):
             self.deadzone_config.stick_curve = float(stick_curve_setting)
@@ -159,7 +159,7 @@ class XInputService:
             self._stop_event = threading.Event()
             self.polling_thread = threading.Thread(target=self._xinput_polling_loop, daemon=True)
             self.polling_thread.start()
-            self.logger.info("XInputService polling thread started.")
+            self.logger.info("Start XInput polling")
         elif not self.xinput_available:
             self.logger.info("XInputService: XInput not available, polling not started.")
         else: self.logger.warning("XInputService: Polling thread already running.")
@@ -173,7 +173,7 @@ class XInputService:
                 try: self.polling_thread.join(timeout=1.0)
                 except Exception as e: self.logger.error(f"Error joining XInput polling thread: {e}")
                 if self.polling_thread.is_alive(): self.logger.warning("XInput polling thread did not exit cleanly.")
-                else: self.logger.info("XInput polling thread joined.")
+                else: self.logger.debug("XInput polling thread joined")
             self.polling_thread = None
             self._stop_event = None
             # Ensure any active rumbles are stopped
@@ -182,12 +182,12 @@ class XInputService:
                  if self.connected[i] and XInput and hasattr(XInput, 'set_vibration'): 
                     try: XInput.set_vibration(i, 0, 0)
                     except: pass # Ignore errors on cleanup
-            self.logger.info("XInputService polling stopped.")
+            self.logger.info("Stop XInput polling")
         else: self.logger.warning("XInputService: Polling not running.")
 
     def _xinput_polling_loop(self):
         """Main loop fetching XInput events, normalizing, and forwarding them."""
-        self.logger.info("XInputService polling loop started.")
+        self.logger.info("XInput loop start")
         polling_interval = 1.0 / self.polling_rate_hz
 
         while self._stop_event and not self._stop_event.is_set():
@@ -282,7 +282,7 @@ class XInputService:
             sleep_dur = polling_interval - elapsed
             if sleep_dur > 0: time.sleep(sleep_dur)
             else: time.sleep(0.000001)
-        self.logger.info("XInputService polling loop stopped.")
+        self.logger.debug("XInput loop stopped")
 
     def _execute_xinput_rumble_sequence(self, user_index: int):
         """Execute a rumble sequence on the specified XInput controller."""

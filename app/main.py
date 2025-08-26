@@ -28,32 +28,26 @@ from app.services.osc_service import OSCService
 from app.utils.logging_config import setup_logging, DEFAULT_LOG_LEVEL
 from app.utils.runtime_paths import get_base_path, load_or_create_secret_key
 
-# Logger setup will be done in main after parsing args
 ## logging configured later via setup_logging
 logger = logging.getLogger(__name__) # Get logger instance, setup_logging will configure it
 
 ## No startup banner; rely on structured logging
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Gamepad OSC Mapper')
-    parser.add_argument(
-        '--log-level',
-        default=logging.getLevelName(DEFAULT_LOG_LEVEL), # Use string name of default level
-        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        help='Set the logging level (default: INFO)'
-    )
-    args = parser.parse_args()
-
-    # Convert string log level to logging level integer
-    numeric_log_level = getattr(logging, args.log_level.upper(), None)
+def run_server(log_level_name: str | None = None) -> None:
+    # Determine log level
+    if log_level_name is None:
+        log_level_name = logging.getLevelName(DEFAULT_LOG_LEVEL)
+    numeric_log_level = getattr(logging, str(log_level_name).upper(), None)
     if not isinstance(numeric_log_level, int):
-        raise ValueError(f'Invalid log level: {args.log_level}')
+        raise ValueError(f'Invalid log level: {log_level_name}')
 
-    setup_logging(level=numeric_log_level) # Pass the parsed level
-    
-    # Now that logging is configured, we can log the atexit registration
-    # logger.info("Registered _main_py_atexit_diagnostics.") # No longer registering
-    logger.info(f"Logging level set to: {args.log_level}")
+    setup_logging(level=numeric_log_level)
+    # Quiet Werkzeug request logs to WARNING to avoid noisy per-request lines
+    try:
+        logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    except Exception:
+        pass
+    logger.info(f"Logging level set to: {log_level_name}")
     logger.info("Starting Gamepad OSC Mapper application...")
 
     # Initialize Flask app and SocketIO (frozen-safe paths)
@@ -74,54 +68,43 @@ if __name__ == "__main__":
     socketio = SocketIO(app, logger=enable_socketio_logs, engineio_logger=enable_socketio_logs, async_mode=selected_mode)
 
     # Initialize Services (Order can matter for dependencies)
-    config_service = ConfigService() # No direct dependencies from other custom services in __init__
-    
-    # InputService depends on ConfigService and SocketIO (optional for emit)
+    config_service = ConfigService()
     input_service = InputService(config_service_instance=config_service, socketio_instance=socketio)
-
-    # OSCService depends on ConfigService 
     osc_service = OSCService(config_service_instance=config_service)
-
-    # ChannelProcessingService depends on OSCService, InputService, ConfigService, and SocketIO
     channel_processing_service = ChannelProcessingService(
         config_service_instance=config_service,
         input_service_instance=input_service,
         socketio_instance=socketio,
         osc_service_instance=osc_service
     )
-    # After ChannelProcessingService is created, set its instance on OSCService if needed by OSCService
-    # This resolves a potential circular dependency if OSCService also needed ChannelProcessingService in its __init__
     if hasattr(osc_service, 'set_channel_processing_service'):
         osc_service.set_channel_processing_service(channel_processing_service)
     else:
         logger.warning("OSCService does not have 'set_channel_processing_service' method. Channel processing might not be fully integrated with OSC output.")
 
-
-    # WebService depends on app, SocketIO, ConfigService, OSCService, InputService
     web_service = WebService(
         app_instance=app,
         socketio_instance=socketio,
         config_service_instance=config_service,
         osc_service_instance=osc_service,
         input_service_instance=input_service
-        # Removed: channel_processing_service_instance=channel_processing_service
     )
-    
-    # Start the input polling thread from InputService
+
     input_service.start_polling()
 
-    # Removed keep-alive thread; not required for threading mode
-
-    # Start the Flask-SocketIO web server
-    # Allowing 0.0.0.0 to make it accessible on the network
-    # Debug mode should be False for production or when not actively debugging Flask itself
     host = config_service.get_web_settings().get('host', '127.0.0.1')
     port = config_service.get_web_settings().get('port', 5000)
-    logger.info(f"Starting web server on {host}:{port}")
-    
+    logger.info(f"Web server on {host}:{port}")
+
     try:
-        # Run SocketIO in threading mode; disable Flask debug and reloader in production
-        socketio.run(app, host=host, port=port, debug=False, use_reloader=False)
+        socketio.run(
+            app,
+            host=host,
+            port=port,
+            debug=False,
+            use_reloader=False,
+            allow_unsafe_werkzeug=True,
+        )
     except KeyboardInterrupt:
         logger.info("Application interrupted by user (KeyboardInterrupt).")
     except Exception as e:
@@ -132,5 +115,16 @@ if __name__ == "__main__":
             input_service.stop_polling()
         if 'channel_processing_service' in locals() and channel_processing_service:
             channel_processing_service.stop_processing_loop()
-        # Add any other cleanup tasks here
-        logger.info("Application shutdown complete.") 
+        logger.info("Application shutdown complete.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Gamepad OSC Mapper')
+    parser.add_argument(
+        '--log-level',
+        default=logging.getLevelName(DEFAULT_LOG_LEVEL),
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        help='Set the logging level (default: INFO)'
+    )
+    args = parser.parse_args()
+    run_server(args.log_level)

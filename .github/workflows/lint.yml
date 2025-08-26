@@ -13,12 +13,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install ruff
+      - name: Install ruff (if config present)
         run: |
           python -m pip install --upgrade pip
           pip install ruff
-      - name: Run ruff
+      - name: Run ruff (skip if no config)
         run: |
-          ruff --version
-          # Run lint but do not fail CI initially; tighten later
-          ruff check app || true
+          if [ -f ruff.toml ] || [ -f pyproject.toml ]; then
+            ruff --version
+            # Run lint but do not fail CI initially; tighten later
+            ruff check app || true
+          else
+            echo "No ruff config; skipping lint"
+          fi

@@ -1,78 +1,42 @@
 Gamepad OSC Mapper
 ===================
+Turn any gamepad into an OSC (Open Sound Control) controller. Map buttons, sticks, triggers, IMU to OSC, and configure everything in a web interface.
 
-[![Build & Release](https://img.shields.io/github/actions/workflow/status/utombords/gamepad-osc-mapper/release.yml?branch=main&label=build%20%26%20release)](https://github.com/utombords/gamepad-osc-mapper/actions)
-[![Lint](https://img.shields.io/github/actions/workflow/status/utombords/gamepad-osc-mapper/lint.yml?label=lint)](https://github.com/utombords/gamepad-osc-mapper/actions)
+Run it your way
+- GUI (desktop): `GamepadOSCMapper-GUI.exe` — native control panel with Start/Stop Server, live status, and quick access to Web/OSC settings.
+- CLI (server only): `GamepadOSCMapper-CLI-OneFile.exe` — lightweight one‑file server.
 
-Gamepad OSC Mapper lets you map inputs from XInput (Xbox) and JoyShockLibrary (DualShock/DualSense/Switch) controllers to OSC messages over UDP. Configure mappings in a local web UI, send to any OSC target on your LAN, and tune rate/format precisely.
+Quick start
+1) Download from Releases and place the EXE(s) in a writable folder (creates `configs/` next to the EXE).
+2) GUI: run `GamepadOSCMapper-GUI.exe`, click Start Server, then “Open Web UI”.
+   CLI: run `GamepadOSCMapper-CLI-OneFile.exe` and open `http://127.0.0.1:5000`.
+3) Settings → OSC Server: set target IP/port (your app’s OSC listener), then Save.
+4) OSC Channels: add channels (address, type, range/default).
+5) Input Mapping: pick Layer A, select an input, choose action (direct/rate/toggle/step/reset) and channel(s). Move the control to test.
 
-Features
-- Map buttons, sticks, triggers, and IMU to OSC
-- Modes: direct, rate, toggle, step, reset, set from input, layer switch
-- 60 Hz “burst while moving” with low idle CPU
-- String channels (two-state) and variable expansion in addresses/strings
-- Per-channel ranges and defaults; endpoint snapping for stable edges
-- Config saved next to the EXE (portable)
-- Optional Local Bind IP and OSC bundles toggle (compatibility)
+Concept & features
+- Map buttons, sticks, triggers, IMU (for JSL devices) to OSC.
+- Actions: direct, rate, toggle, step, reset, set from input; multi‑target per input.
+- Supports variables used in OSC addresses and messages.
+- Portable config (`configs/active_config.json`) saved next to the EXE.
 
-Quick start (Windows one‑file)
-1) Download the latest release EXE from GitHub Releases
-2) Place it in a folder you control (it creates `configs/` beside the EXE)
-3) Run the EXE, open the UI at `http://127.0.0.1:5000`
-4) Set OSC target IP/port in Settings → OSC Server
-5) Add channels in OSC Channels
-6) Map inputs in Layer A and test
+Screenshots
+![Web – Mapping](docs/screenshots/layer.png)
+![Web – Channels](docs/screenshots/channels.png)
+![GUI](docs/screenshots/gui.png)
+![CLI](docs/screenshots/cli.png)
 
-Network tips
-- Sset IP to your subnet broadcast (e.g., `192.168.1.255`).
-- Some receivers do not support OSC bundles: uncheck “Use OSC Bundles” (Settings → OSC Server).
-- If you have multiple NICs, set “Local Bind IP” to your LAN IP so packets leave the correct adapter.
-- Windows Firewall can block outbound UDP for unknown EXEs; allow outbound for the EXE on Private networks.
+Build (developers)
+- Install deps: `python -m pip install -r requirements.txt`
+- Build both GUI and CLI one‑file: `pyinstaller --clean --noconfirm main.spec`
+- Artifacts: `dist/GamepadOSCMapper-GUI.exe`, `dist/GamepadOSCMapper-CLI-OneFile.exe`
 
-Controllers
-- XInput: up to 4 slots (X0–X3). Sticks −1..1, triggers 0..1. Deadzones/curve in Settings.
-- JoyShockLibrary (DualShock/DualSense/Switch): buttons, sticks, triggers, optional IMU.
-
-Build from source
-Prereqs: Python 3.10+, pip
-
-Install
-```
-pip install -r requirements.txt
-```
-
-Run (dev)
-```
-python -m app.main
-```
-
-Build one‑file (PyInstaller)
-```
-pip install pyinstaller
-pyinstaller --clean --noconfirm main.spec
-```
-The EXE will be in `dist/`.
-
-Repository structure
-- `app/` backend services (OSC, input, config, web)
-- `static/` frontend JS/CSS
-- `templates/` HTML
-- `configs/` active and presets (created at runtime)
-
-Releases and versioning
-- Semantic versioning (MAJOR.MINOR.PATCH)
-- Release notes list features, fixes, and known issues
-
-Third‑party notices
-- See `THIRD_PARTY_NOTICES.md` for bundled libraries and licenses. For JoyShockLibrary changes, see `docs/JoyShockLibraryMOD.txt`.
+Notes
+- The GUI bundles Qt; size is larger by design. The CLI one‑file is trimmed and small.
+- The web UI is reachable on your LAN (configure host/port in Web settings).
 
 License
-This project is licensed under the MIT License. See `LICENSE`.
-
-Security/Reporting
-Please open an issue for non-sensitive bugs. For sensitive reports, contact the maintainer privately.
+MIT — see `LICENSE`.
 
 Acknowledgements
-- python-osc, Flask, Flask‑SocketIO, JoyShockLibrary, XInput (Python package)
-
-
+python‑osc, Flask, Flask‑SocketIO, JoyShockLibrary, XInput‑Python

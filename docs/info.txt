@@ -54,7 +54,35 @@ The Gamepad OSC Mapper is a Python and JavaScript application designed to bridge
 Key Technical Features:
 *   **Event-Driven and Continuous Processing:** The backend uses an event-driven model for discrete inputs (button presses/releases) and a continuous processing loop for analog inputs requiring smooth rate-based or direct value changes.
 *   **Python Backend:** Handles core logic including controller input, state management, OSC message generation, and serving the web interface.
-*   **Flask & SocketIO:** The web server is built using Flask, with Flask-SocketIO enabling real-time bidirectional communication between the backend and frontend.
+*   **Flask & SocketIO:** The web server is built using Flask, with Flask-SocketIO enabling real-time bidirectional communication between the backend and frontend. The app runs in threading mode for reliability in frozen builds.
+
+Desktop GUI (PySide6):
+======================
+The project includes a native desktop control panel built with PySide6 (`app/gui_main_qt.py`).
+
+*   Starts/stops the existing Flask/Socket.IO server as a child process (server-only mode).
+*   Shows live log output, controller summary, and exposes Web/OSC settings.
+*   Auto‑connects to the server using the configured Web Host/Port; the Connect button was removed for simplicity.
+*   Top bar order: "Open Web UI" / `Server: ...` / `Socket: ...`.
+*   The GUI uses the same backend and does not replace the web UI; the web UI remains reachable over the network.
+
+Builds and Packaging:
+=====================
+PyInstaller `main.spec` produces two artifacts in one run:
+
+1) CLI (onefile): `GamepadOSCMapper-CLI-OneFile.exe`
+   - Minimal build without Qt; only threading driver for Engine.IO is included.
+   - Small (~10 MB depending on Python version).
+
+2) GUI (onefile): `GamepadOSCMapper-GUI.exe`
+   - Includes PySide6 (QtCore/QtGui/QtWidgets) and minimal Qt platform plugin.
+   - Unused Qt modules/plugins (e.g., SQL drivers, WebEngine, Multimedia) are excluded to reduce size.
+   - Size depends on PySide6; currently ~200–240 MB typical for Windows.
+
+Notes:
+*   The one‑folder build has been removed.
+*   Qt plugin collection is filtered to only the platform plugin; database drivers and other plugins are excluded.
+*   The GUI launches the server with a `--server` flag (or `GAMEPAD_OSC_RUN_MODE=server`) and calls `app.main.run_server()` directly in the frozen build.
 *   **JavaScript Frontend:** The UI is built with HTML, CSS (Tailwind CSS), and vanilla JavaScript, organized into modules for managing different aspects of the interface and application state.
 *   **JSON Configuration:** All application settings, mappings, channel definitions, and variable definitions are stored in a central JSON file (`active_config.json`).
 *   **Centralized Input Name Definitions:** Raw-to-generic input name mappings are defined in a single JSON file (`app/definitions/input_mapping_definitions.json`), loaded by the backend at startup and served to the frontend via an API endpoint, ensuring consistency across the application.
@@ -78,7 +106,8 @@ Backend Components (Python - located in `/app/`):
         *   Starts the `InputService` polling loop (`input_service.start_polling()`).
         *   No greenlet keep-alive required in threading mode.
         *   Starts the Flask-SocketIO web server (`socketio.run(app, ...)`), making the UI accessible.
-        *   Includes an `atexit` handler (`_main_py_atexit_diagnostics`) for diagnostic logging on shutdown.
+        *   Clean shutdown is handled in a `finally` block; no separate `atexit` diagnostics handler is registered.
+        *   Uses `allow_unsafe_werkzeug=True` when running the development server in frozen (embedded) mode.
         *   Handles graceful shutdown by stopping the input polling and channel processing loops.
 
 2.  **`/services/config_service.py` (ConfigService)**
