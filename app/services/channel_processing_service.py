@@ -284,15 +284,15 @@ class ChannelProcessingService:
                                     self.channel_values[actual_channel_name] = new_channel_val_clamped
                                     current_time_monotonic = time.monotonic()
                                     last_emit = self.last_channel_emit_time.get(actual_channel_name, 0)
+                                    # Always refresh burst-cadence scheduling on value change
+                                    self.channel_activity_until[actual_channel_name] = current_time_monotonic + self.activity_emit_window_s
+                                    self.channel_next_emit_time[actual_channel_name] = current_time_monotonic + self.channel_update_emit_interval
                                     if (current_time_monotonic - last_emit) >= self.channel_update_emit_interval:
                                         if self.socketio:
                                             self.socketio.emit('channel_value_update', {'name': actual_channel_name, 'value': new_channel_val_clamped})
                                         if self.osc_service:
                                             self.osc_service.handle_value_update('channel', actual_channel_name, new_channel_val_clamped)
                                         self.last_channel_emit_time[actual_channel_name] = current_time_monotonic
-                                        # Mark channel active for burst cadence
-                                        self.channel_activity_until[actual_channel_name] = current_time_monotonic + self.activity_emit_window_s
-                                        self.channel_next_emit_time[actual_channel_name] = current_time_monotonic + self.channel_update_emit_interval
                                 active_actions_this_tick += 1
                         
                         elif action == "direct":
@@ -335,16 +335,16 @@ class ChannelProcessingService:
                                     self.channel_values[actual_target_name] = clamped_scaled_value
                                     current_time_monotonic = time.monotonic()
                                     last_emit = self.last_channel_emit_time.get(actual_target_name, 0)
+                                    # For analog inputs, always refresh burst-cadence scheduling on change
+                                    if is_bipolar or is_unipolar_trigger:
+                                        self.channel_activity_until[actual_target_name] = current_time_monotonic + self.activity_emit_window_s
+                                        self.channel_next_emit_time[actual_target_name] = current_time_monotonic + self.channel_update_emit_interval
                                     if (current_time_monotonic - last_emit) >= self.channel_update_emit_interval:
                                         if self.socketio:
                                             self.socketio.emit('channel_value_update', {'name': actual_target_name, 'value': clamped_scaled_value})
                                         if self.osc_service:
                                             self.osc_service.handle_value_update('channel', actual_target_name, clamped_scaled_value)
                                         self.last_channel_emit_time[actual_target_name] = current_time_monotonic
-                                        # Only schedule burst cadence for analog inputs (sticks/triggers/IMU)
-                                        if is_bipolar or is_unipolar_trigger:
-                                            self.channel_activity_until[actual_target_name] = current_time_monotonic + self.activity_emit_window_s
-                                            self.channel_next_emit_time[actual_target_name] = current_time_monotonic + self.channel_update_emit_interval
                                 active_actions_this_tick += 1
 
                         elif action == "set_value_from_input":
@@ -383,14 +383,15 @@ class ChannelProcessingService:
                                         self.channel_values[actual_channel_name] = clamped_value_to_set
                                         current_time_monotonic = time.monotonic()
                                         last_emit = self.last_channel_emit_time.get(actual_channel_name, 0)
+                                        # Always refresh burst-cadence scheduling on value change
+                                        self.channel_activity_until[actual_channel_name] = current_time_monotonic + self.activity_emit_window_s
+                                        self.channel_next_emit_time[actual_channel_name] = current_time_monotonic + self.channel_update_emit_interval
                                         if (current_time_monotonic - last_emit) >= self.channel_update_emit_interval:
                                             if self.socketio:
                                                 self.socketio.emit('channel_value_update', {'name': actual_channel_name, 'value': clamped_value_to_set})
                                             if self.osc_service:
                                                 self.osc_service.handle_value_update('channel', actual_channel_name, clamped_value_to_set)
                                             self.last_channel_emit_time[actual_channel_name] = current_time_monotonic
-                                            self.channel_activity_until[actual_channel_name] = current_time_monotonic + self.activity_emit_window_s
-                                            self.channel_next_emit_time[actual_channel_name] = current_time_monotonic + self.channel_update_emit_interval
                                         active_actions_this_tick += 1
                     # Only send when values actually change
 

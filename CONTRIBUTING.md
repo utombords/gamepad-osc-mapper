@@ -17,5 +17,3 @@ This project bundles or interfaces with the following third-party components:
 
 - Flask, Flask-SocketIO, python-engineio, python-socketio
   - Licenses: BSD/MIT-style; see respective projects
-
-If you are a rights holder and believe attribution is missing or incorrect, please open an issue.
