@@ -471,7 +471,7 @@ class JSLService:
 
                         stick_inputs = [
                             (self.JSL_STANDARD_INPUT_NAMES["STICK_LX"], js_state.stickLX, 'stick'),
-                            (self.JSL_STANDARD_INPUT_NAMES["STICK_LY"], -js_state.stickLY, 'stick'), # Invert Y
+                            (self.JSL_STANDARD_INPUT_NAMES["STICK_LY"], js_state.stickLY, 'stick'),
                             (self.JSL_STANDARD_INPUT_NAMES["STICK_RX"], js_state.stickRX, 'stick'),
                             (self.JSL_STANDARD_INPUT_NAMES["STICK_RY"], js_state.stickRY, 'stick')
                         ]
