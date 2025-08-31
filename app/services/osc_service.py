@@ -15,9 +15,7 @@ from pythonosc import osc_bundle_builder
 from pythonosc.osc_message_builder import OscMessageBuilder
 # from pythonosc.dispatcher import Dispatcher # If receiving OSC, not typically needed for a mapper
 
-# Ensure logger level is set appropriately if not inherited
-logger.setLevel(logging.INFO)  # Respect global default; DEBUG only when root level is DEBUG
-logger.debug("OSC_SERVICE_MODULE: Logger configured (module logger level INFO; DEBUG requires root DEBUG).")
+# Inherit level from root logger so --log-level applies consistently
 
 class OSCService:
     """High-level OSC sender bound to the application's configuration service."""

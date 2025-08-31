@@ -745,7 +745,7 @@ The `active_config.json` file is central to the application's operation.
 *   **`osc_settings`**: object
     *   `ip`: string (e.g., "127.0.0.1") - Target IP address for OSC messages.
     *   `port`: integer (e.g., 9000) - Target port for OSC messages.
-    *   `max_updates_per_second`: integer (e.g., 60) - Currently informational for `OSCService`, but could be used for throttling if implemented.
+    *   `max_updates_per_second`: integer (e.g., 60) - Per-channel emit throttle used by `ChannelProcessingService` (emits at most this often per channel; values emit only on change).
 *   **`web_settings`**: object
     *   `host`: string (e.g., "127.0.0.1") - Host address for the Flask web server.
     *   `port`: integer (e.g., 5000) - Port for the Flask web server.

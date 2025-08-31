@@ -1,9 +1,9 @@
 """Channel and variable mapping processing.
 
 This module merges raw controller inputs and applies mapping rules to update
-internal OSC channels and variables. It enforces emission cadence, queues OSC
-messages via the OSC service, and exposes helpers for layer switching and
-configuration-driven behavior.
+internal OSC channels and variables. It applies a simple per‑channel emit
+throttle, queues OSC messages via the OSC service, and exposes helpers for
+layer switching and configuration‑driven behavior.
 """
 import logging
 import time
@@ -38,7 +38,7 @@ class ChannelProcessingService:
     - Maintain merged input state across connected controllers
     - Apply continuous actions (direct, rate, set_value_from_input)
     - Apply discrete actions (toggle, step, reset, variable operations)
-    - Enforce per-channel emission cadence and bundle OSC messages
+    - Bundle OSC messages and apply simple per-channel emit throttling
     - Track active layer and re-cache mappings on configuration updates
     """
     def __init__(self, config_service_instance, input_service_instance, socketio_instance, osc_service_instance):
@@ -53,18 +53,13 @@ class ChannelProcessingService:
         self.active_layer_id = 'A' 
         self.continuous_actions_lock = threading.Lock()
         self.action_details_for_continuous_processing = {}
-        # Activity tracking for cadence while moving
-        self.channel_activity_until = {}
-        self.activity_emit_window_s = 0.1
-        # Per-channel scheduled next emit time for strict cadence during activity
-        self.channel_next_emit_time = {}
         
         # Timestamp fields for loop timing
         # (per-input last-handle timestamp removed; not required)
 
         self.running = True
         self.processing_loop_thread = None
-        self.last_processing_loop_time = time.monotonic()
+        self.last_processing_loop_time = time.perf_counter()
         # Core processing rate; OSC/channel emits are throttled separately
         self.processing_rate_hz = 120.0
 
@@ -80,6 +75,10 @@ class ChannelProcessingService:
         # OSC/channel emit target rate (from config osc_settings.max_updates_per_second)
         self.channel_update_emit_interval = 1.0 / 60.0
         self.last_channel_emit_time = {}
+        # Pending buffer for throttled emits: latest value and metadata per channel
+        self.pending_channel_value = {}
+        self.pending_channel_ts = {}
+        self.pending_channel_meta = {}
 
         if self.input_service:
             self.input_service.register_input_listener(self.handle_input_update)
@@ -95,21 +94,25 @@ class ChannelProcessingService:
         else:
             logger.warning("ChannelProcessingService: ConfigService instance not provided, cannot subscribe to config changes.")
 
-        # Apply initial cadence from config
+        # Apply initial emit throttle from config
         self._refresh_emit_cadence_from_config()
+        # Derive CPS loop rate from OSC throttle (2x, clamped)
+        self._apply_auto_rates_from_osc_settings()
         self._start_processing_loop()
         self._cache_current_layer_mappings()
 
     def _handle_config_updated(self):
         logger.info("Config updated -> reload CPS state")
         self._initialize_channel_states()
-        # Refresh emit cadence based on updated osc_settings
+        # Refresh per‑channel emit throttle based on osc_settings
         self._refresh_emit_cadence_from_config()
+        # Update CPS loop rate from osc_settings (auto 2x)
+        self._apply_auto_rates_from_osc_settings()
         self._cache_current_layer_mappings()
         logger.debug("CPS: Finished reloading states after config update.")
 
     def _refresh_emit_cadence_from_config(self):
-        """Refresh the per-channel emit interval from the active OSC settings."""
+        """Refresh the per‑channel emit interval from the active OSC settings."""
         try:
             osc_settings = self.config_service.get_osc_settings() if self.config_service else {}
             max_hz = float(osc_settings.get('max_updates_per_second', 60))
@@ -119,10 +122,28 @@ class ChannelProcessingService:
                 max_hz = 240.0
             new_interval = 1.0 / max_hz
             if abs(new_interval - self.channel_update_emit_interval) > 1e-6:
-                logger.info(f"Cadence: {max_hz:.0f} Hz")
+                logger.info(f"Emit throttle: {max_hz:.0f} Hz")
             self.channel_update_emit_interval = new_interval
         except Exception as e:
-            logger.warning(f"CPS: Failed to refresh emit cadence from config: {e}. Keeping previous interval {self.channel_update_emit_interval:.6f}s")
+            logger.warning(f"CPS: Failed to refresh emit throttle from config: {e}. Keeping previous interval {self.channel_update_emit_interval:.6f}s")
+
+    def _apply_auto_rates_from_osc_settings(self):
+        """Set processing loop Hz to ~2x the per-channel throttle (bounded)."""
+        try:
+            osc_settings = self.config_service.get_osc_settings() if self.config_service else {}
+            fps = float(osc_settings.get('max_updates_per_second', 60.0))
+            if fps <= 0:
+                fps = 60.0
+            target_cps = 2.0 * fps
+            # Clamp to reasonable bounds
+            if target_cps < 120.0:
+                target_cps = 120.0
+            if target_cps > 480.0:
+                target_cps = 480.0
+            self.processing_rate_hz = target_cps
+        except Exception:
+            # Keep previous value on error
+            pass
 
     def _clamp_and_snap(self, value: float, min_val: float, max_val: float) -> float:
         """Clamp a value to [min_val, max_val] and snap to endpoints within epsilon."""
@@ -141,11 +162,37 @@ class ChannelProcessingService:
             return max_val
         return v
 
+    def _emit_or_buffer(self, channel_name: str, value, meta: dict | None):
+        """Emit immediately if out of throttle window; otherwise buffer latest value.
+
+        meta can include 'osc_address' for OSC emission; if None or missing, only socket event is sent.
+        """
+        now = time.perf_counter()
+        last_emit = self.last_channel_emit_time.get(channel_name, 0.0)
+        if (now - last_emit) >= self.channel_update_emit_interval:
+            if self.socketio:
+                self.socketio.emit('channel_value_update', {'name': channel_name, 'value': value})
+            if meta and meta.get('osc_address') and self.osc_service:
+                self.osc_service.handle_value_update('channel', channel_name, value)
+            self.last_channel_emit_time[channel_name] = now
+            # Clear any pending for this channel
+            self.pending_channel_value.pop(channel_name, None)
+            self.pending_channel_ts.pop(channel_name, None)
+            self.pending_channel_meta.pop(channel_name, None)
+            # Immediate OSC flush to minimize latency when allowed
+            if self.osc_service:
+                self.osc_service.send_bundled_messages()
+        else:
+            self.pending_channel_value[channel_name] = value
+            self.pending_channel_ts[channel_name] = now
+            if meta is not None:
+                self.pending_channel_meta[channel_name] = meta
+
     def _start_processing_loop(self):
         """Start the background processing loop if not already running."""
         if self.processing_loop_thread is None or not self.processing_loop_thread.is_alive():
             self.running = True
-            self.last_processing_loop_time = time.monotonic()
+            self.last_processing_loop_time = time.perf_counter()
             self.processing_loop_thread = threading.Thread(target=self._continuous_processing_loop, daemon=True)
             self.processing_loop_thread.start()
 
@@ -222,14 +269,17 @@ class ChannelProcessingService:
     def _continuous_processing_loop(self):
         """Process continuous actions and emit OSC while running.
 
-        Applies continuous actions each tick, performs burst-cadence updates
-        for active channels, and sends queued OSC messages in bundles.
+        Applies continuous actions each tick and sends queued OSC messages in
+        bundles. Emits are based solely on value changes and a simple per‑channel
+        throttling interval.
         """
         loop_interval = 1.0 / self.processing_rate_hz
         logger.info(f"CPS loop start @ {loop_interval:.4f}s")
 
         while self.running:
-            loop_start_time = time.monotonic()
+            # Recompute each tick to reflect any runtime rate change
+            loop_interval = 1.0 / self.processing_rate_hz
+            loop_start_time = time.perf_counter()
             loop_delta_time = loop_start_time - self.last_processing_loop_time
             self.last_processing_loop_time = loop_start_time
             
@@ -282,17 +332,8 @@ class ChannelProcessingService:
 
                                 if abs(new_channel_val_clamped - current_channel_val) > 1e-7:
                                     self.channel_values[actual_channel_name] = new_channel_val_clamped
-                                    current_time_monotonic = time.monotonic()
-                                    last_emit = self.last_channel_emit_time.get(actual_channel_name, 0)
-                                    # Always refresh burst-cadence scheduling on value change
-                                    self.channel_activity_until[actual_channel_name] = current_time_monotonic + self.activity_emit_window_s
-                                    self.channel_next_emit_time[actual_channel_name] = current_time_monotonic + self.channel_update_emit_interval
-                                    if (current_time_monotonic - last_emit) >= self.channel_update_emit_interval:
-                                        if self.socketio:
-                                            self.socketio.emit('channel_value_update', {'name': actual_channel_name, 'value': new_channel_val_clamped})
-                                        if self.osc_service:
-                                            self.osc_service.handle_value_update('channel', actual_channel_name, new_channel_val_clamped)
-                                        self.last_channel_emit_time[actual_channel_name] = current_time_monotonic
+                                    channel_meta_for_emit = channel_meta
+                                    self._emit_or_buffer(actual_channel_name, new_channel_val_clamped, channel_meta_for_emit)
                                 active_actions_this_tick += 1
                         
                         elif action == "direct":
@@ -333,18 +374,8 @@ class ChannelProcessingService:
 
                                 if self.channel_values.get(actual_target_name) != clamped_scaled_value:
                                     self.channel_values[actual_target_name] = clamped_scaled_value
-                                    current_time_monotonic = time.monotonic()
-                                    last_emit = self.last_channel_emit_time.get(actual_target_name, 0)
-                                    # For analog inputs, always refresh burst-cadence scheduling on change
-                                    if is_bipolar or is_unipolar_trigger:
-                                        self.channel_activity_until[actual_target_name] = current_time_monotonic + self.activity_emit_window_s
-                                        self.channel_next_emit_time[actual_target_name] = current_time_monotonic + self.channel_update_emit_interval
-                                    if (current_time_monotonic - last_emit) >= self.channel_update_emit_interval:
-                                        if self.socketio:
-                                            self.socketio.emit('channel_value_update', {'name': actual_target_name, 'value': clamped_scaled_value})
-                                        if self.osc_service:
-                                            self.osc_service.handle_value_update('channel', actual_target_name, clamped_scaled_value)
-                                        self.last_channel_emit_time[actual_target_name] = current_time_monotonic
+                                    channel_meta_for_emit = channel_meta
+                                    self._emit_or_buffer(actual_target_name, clamped_scaled_value, channel_meta_for_emit)
                                 active_actions_this_tick += 1
 
                         elif action == "set_value_from_input":
@@ -359,7 +390,7 @@ class ChannelProcessingService:
                                 current_var_val = self.config_service.get_internal_variable_value(target_variable_name)
                                 if current_var_val != value_to_set:
                                     self.config_service.set_internal_variable_value(target_variable_name, value_to_set)
-                                active_actions_this_tick +=1
+                                active_actions_this_tick += 1
                             elif target_type == "osc_channel": 
                                 target_channel_names_from_map = mapping_config.get('target_name')
                                 if not target_channel_names_from_map: 
@@ -381,47 +412,33 @@ class ChannelProcessingService:
 
                                     if self.channel_values.get(actual_channel_name) != clamped_value_to_set:
                                         self.channel_values[actual_channel_name] = clamped_value_to_set
-                                        current_time_monotonic = time.monotonic()
-                                        last_emit = self.last_channel_emit_time.get(actual_channel_name, 0)
-                                        # Always refresh burst-cadence scheduling on value change
-                                        self.channel_activity_until[actual_channel_name] = current_time_monotonic + self.activity_emit_window_s
-                                        self.channel_next_emit_time[actual_channel_name] = current_time_monotonic + self.channel_update_emit_interval
-                                        if (current_time_monotonic - last_emit) >= self.channel_update_emit_interval:
-                                            if self.socketio:
-                                                self.socketio.emit('channel_value_update', {'name': actual_channel_name, 'value': clamped_value_to_set})
-                                            if self.osc_service:
-                                                self.osc_service.handle_value_update('channel', actual_channel_name, clamped_value_to_set)
-                                            self.last_channel_emit_time[actual_channel_name] = current_time_monotonic
+                                        self._emit_or_buffer(actual_channel_name, clamped_value_to_set, {'osc_address': channel_meta.get('osc_address')})
                                         active_actions_this_tick += 1
                     # Only send when values actually change
 
-            # Burst cadence while active: emit at interval for channels marked active
-            now = time.monotonic()
-            if processed_any_continuous:
-                for ch_name, until_ts in list(self.channel_activity_until.items()):
-                    if until_ts <= now:
-                        continue
-                    next_due = self.channel_next_emit_time.get(ch_name, 0.0)
-                    if now >= next_due:
-                        meta = self._all_channel_meta_map.get(ch_name)
-                        if not meta:
-                            continue
-                        current_val = self.channel_values.get(ch_name)
-                        if current_val is None:
-                            continue
+            # End-of-loop flush for pending buffered values when throttle window elapses
+            now = time.perf_counter()
+            if self.pending_channel_value:
+                for ch_name, pending_val in list(self.pending_channel_value.items()):
+                    last_emit = self.last_channel_emit_time.get(ch_name, 0.0)
+                    if (now - last_emit) >= self.channel_update_emit_interval:
+                        meta = self.pending_channel_meta.get(ch_name)
+                        if meta is None:
+                            meta = self._all_channel_meta_map.get(ch_name)
                         if self.socketio:
-                            self.socketio.emit('channel_value_update', {'name': ch_name, 'value': current_val})
-                        if meta.get('osc_address') and self.osc_service:
-                            self.osc_service.handle_value_update('channel', ch_name, current_val)
+                            self.socketio.emit('channel_value_update', {'name': ch_name, 'value': pending_val})
+                        if meta and meta.get('osc_address') and self.osc_service:
+                            self.osc_service.handle_value_update('channel', ch_name, pending_val)
                         self.last_channel_emit_time[ch_name] = now
-                        # schedule next due time aligned to cadence
-                        self.channel_next_emit_time[ch_name] = next_due + self.channel_update_emit_interval
+                        self.pending_channel_value.pop(ch_name, None)
+                        self.pending_channel_ts.pop(ch_name, None)
+                        self.pending_channel_meta.pop(ch_name, None)
 
             if self.osc_service:
                 self.osc_service.send_bundled_messages()
 
             # Coarse sleep to next loop
-            elapsed_in_loop = time.monotonic() - loop_start_time
+            elapsed_in_loop = time.perf_counter() - loop_start_time
             sleep_duration = loop_interval - elapsed_in_loop
             if sleep_duration > 0:
                 time.sleep(sleep_duration)
@@ -590,14 +607,7 @@ class ChannelProcessingService:
                 
                 if value_to_emit_if_changed is not None:
                     logger.debug(f"CPS_HANDLE_DISCRETE: Channel '{actual_channel_name}' changed to {value_to_emit_if_changed} by action '{action}'.")
-                    current_time_monotonic = time.monotonic() # Use separate monotonic for emit throttle
-                    last_emit = self.last_channel_emit_time.get(actual_channel_name, 0)
-                    if (current_time_monotonic - last_emit) > self.channel_update_emit_interval:
-                        if self.socketio:
-                            self.socketio.emit('channel_value_update', {'name': actual_channel_name, 'value': value_to_emit_if_changed})
-                            self.last_channel_emit_time[actual_channel_name] = current_time_monotonic
-                    if osc_address and self.osc_service:
-                        self.osc_service.handle_value_update('channel', actual_channel_name, value_to_emit_if_changed)
+                    self._emit_or_buffer(actual_channel_name, value_to_emit_if_changed, {'osc_address': osc_address})
 
         elif target_type == "internal_variable":
             target_variable_name = mapping_config.get('target_name')

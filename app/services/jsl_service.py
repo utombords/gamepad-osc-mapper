@@ -473,7 +473,7 @@ class JSLService:
                             (self.JSL_STANDARD_INPUT_NAMES["STICK_LX"], js_state.stickLX, 'stick'),
                             (self.JSL_STANDARD_INPUT_NAMES["STICK_LY"], -js_state.stickLY, 'stick'), # Invert Y
                             (self.JSL_STANDARD_INPUT_NAMES["STICK_RX"], js_state.stickRX, 'stick'),
-                            (self.JSL_STANDARD_INPUT_NAMES["STICK_RY"], -js_state.stickRY, 'stick')  # Invert Y
+                            (self.JSL_STANDARD_INPUT_NAMES["STICK_RY"], js_state.stickRY, 'stick')
                         ]
                         for name, raw_val, val_type_str in stick_inputs:
                             processed_val = self.main_input_service._apply_deadzone_and_curve(raw_val, val_type_str)
