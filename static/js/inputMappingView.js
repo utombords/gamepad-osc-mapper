@@ -590,7 +590,7 @@ App.InputMappingView = (function() {
         const currentMapping = App.ConfigManager.getMappingForInput(layerId, inputId) || {};
         let targetNameValue = currentMapping.target_name; // Can be a string or an array (for OSC channels).
 
-        const labelEl = document.createElement('label'); // Use 'labelEl' to avoid conflict with 'label' in loops.
+        const labelEl = document.createElement('label');
         labelEl.className = 'form-label';
         labelEl.textContent = 'Target Name:';
         container.appendChild(labelEl);
@@ -620,7 +620,10 @@ App.InputMappingView = (function() {
                 `;
                 checkboxContainer.appendChild(headerRow);
 
-                const channelEntries = Object.entries(channels).sort(([aName], [bName]) => aName.localeCompare(bName));
+                // Read shared sort mode from Channels tab (defaults to name) & sort via utils
+                const sortSelect = document.getElementById('channels-sort-mode');
+                const sortMode = (sortSelect && sortSelect.value) ? sortSelect.value : 'name';
+                const channelEntries = App.ChannelUtils.sortChannelEntries(Object.entries(channels), sortMode);
                 channelEntries.forEach(([channelName, channelData]) => {
                     const channelWrapper = document.createElement('div');
                     channelWrapper.className = 'grid grid-cols-12 items-center gap-1 px-2 py-0.5 hover:bg-gray-700/30 rounded';
@@ -682,6 +685,14 @@ App.InputMappingView = (function() {
 
                     checkboxContainer.appendChild(channelWrapper);
                 });
+
+                // Re-sort targets live if sort mode changes
+                if (sortSelect && !sortSelect.dataset.imvListenerAttached) {
+                    sortSelect.addEventListener('change', () => {
+                        _populateTargetDropdown(layerId, inputId, 'osc_channel');
+                    });
+                    sortSelect.dataset.imvListenerAttached = 'true';
+                }
             }
             container.appendChild(checkboxContainer);
             

@@ -7,6 +7,7 @@ App.ChannelManager = (function() {
 
     // Module-level variables for DOM Elements
     let channelsListArea = null;
+    let channelsSortModeSelect = null; // New: sort mode
     let showAddChannelModalButton = null; // Button to trigger the 'Add Channel' modal.
 
     // 'Add Channel' Modal Elements
@@ -50,6 +51,7 @@ App.ChannelManager = (function() {
         // Channel List Area
         channelsListArea = document.getElementById('channels-list-area');
         showAddChannelModalButton = document.getElementById('show-add-channel-modal-button');
+        channelsSortModeSelect = document.getElementById('channels-sort-mode');
 
         // 'Add Channel' Modal
         addChannelModal = document.getElementById('addChannelModal');
@@ -101,12 +103,10 @@ App.ChannelManager = (function() {
             return;
         }
 
-        // Sort channels by OSC address for consistent display.
-        const sortedChannels = Object.entries(channelsData).sort(([, channelA], [, channelB]) => {
-            const oscA = channelA.osc_address || '';
-            const oscB = channelB.osc_address || '';
-            return oscA.localeCompare(oscB);
-        });
+        // Determine sort mode (defaults to name)
+        const sortMode = channelsSortModeSelect && channelsSortModeSelect.value ? channelsSortModeSelect.value : 'name';
+
+        const sortedChannels = App.ChannelUtils.sortChannelEntries(Object.entries(channelsData), sortMode);
 
         for (const [name, channel] of sortedChannels) {
             let allMappedInputs = [];
@@ -241,6 +241,8 @@ App.ChannelManager = (function() {
             _updateChannelMeter(name, initialValue);
         }
     }
+
+    // deriveOnValuePreview moved to App.ChannelUtils
     
     /**
      * Shows the 'Add New Channel' modal dialog.
@@ -664,6 +666,15 @@ App.ChannelManager = (function() {
             console.warn("ChannelManager: 'Add Channel' form not found in DOM.");
         }
 
+        if (channelsSortModeSelect) {
+            channelsSortModeSelect.addEventListener('change', () => {
+                const cfg = App.ConfigManager.getConfig();
+                if (cfg) {
+                    _renderChannelList(cfg.internal_channels || {}, cfg);
+                }
+            });
+        }
+
         if (cancelAddChannelBtn) {
             cancelAddChannelBtn.addEventListener('click', _hideAddChannelModal);
         } else {
@@ -672,22 +683,8 @@ App.ChannelManager = (function() {
 
         channelsListArea.addEventListener('click', _handleListAreaClick);
 
-        // Edit Panel specific listeners
-        if (editChannelForm) {
-            // Note: The primary submit logic for editChannelForm is set directly in _editChannel.
-            // This additional listener might be redundant or for a different purpose if _getChannelDataFromEditForm was intended.
-            // For now, keeping it, but ensuring the onsubmit in _editChannel is the primary one.
-            editChannelForm.addEventListener('submit', (event) => {
-                event.preventDefault();
-                // This seems to duplicate logic in _editChannel's onsubmit.
-                // Consider consolidating if _getChannelDataFromEditForm is not used elsewhere or has distinct logic.
-                // const channelName = selectedChannelLabel ? selectedChannelLabel.textContent : null;
-                // if (channelName && channelName !== 'N/A') {
-                //     const updatedData = _getChannelDataFromEditForm(); // Ensure this function is defined if used.
-                //     App.SocketManager.emit('update_channel', { name: channelName, data: updatedData });
-                // }
-            });
-        } else {
+        // Edit Panel submit is wired in _editChannel; no duplicate listener here
+        if (!editChannelForm) {
             console.warn("ChannelManager: 'Edit Channel' form not found in DOM.");
         }
 

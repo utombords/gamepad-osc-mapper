@@ -152,6 +152,14 @@
                         <button id="show-add-channel-modal-button" class="btn btn-primary btn-sm">
                             Add New Channel
                         </button>
+                        <div class="flex items-center space-x-2">
+                            <label for="channels-sort-mode" class="text-sm text-gray-300">Sort by:</label>
+                            <select id="channels-sort-mode" class="form-input-base select-default">
+                                <option value="name">Name</option>
+                                <option value="address">OSC Address</option>
+                                <option value="on">On Value</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div id="channels-list-area" class="md:col-span-2 space-y-2">
@@ -543,6 +551,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/socketManager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/channelUtils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/appLogger.js') }}"></script>
     <script src="{{ url_for('static', filename='js/configManager.js') }}"></script>
     <script src="{{ url_for('static', filename='js/uiManager.js') }}"></script>
