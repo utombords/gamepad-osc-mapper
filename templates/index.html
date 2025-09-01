@@ -166,8 +166,12 @@
                                 </h3>
                                 <form id="editChannelForm" class="space-y-3">
                                     <div>
+                                        <label for="editChannelName" class="form-label">Channel Name:</label>
+                                        <input type="text" id="editChannelName" class="form-input-base w-full" placeholder="e.g., my_channel">
+                                    </div>
+                                    <div>
                                         <label for="editOscAddress" class="form-label">OSC Address:</label>
-                                        <input type="text" id="editOscAddress" class="form-input-base w-full">
+                                        <input type="text" id="editOscAddress" class="form-input-base w-full" placeholder="e.g., /channel/my_channel">
                                     </div>
                                     <div>
                                         <label for="editOscType" class="form-label">OSC Type:</label>
@@ -182,14 +186,14 @@
                                         <label for="editDefault" class="form-label">Default Value:</label>
                                         <input type="text" id="editDefault" class="form-input-base w-full">
                                     </div>
-                                    <!-- String Value 1 (Initially hidden, shown for string type) -->
+                                    <!-- String Off (was String Value 1) (Initially hidden, shown for string type) -->
                                     <div class="form-control-group" id="groupStringValue1" style="display: none;">
-                                        <label for="editStringValue1" class="form-label">String Value 1:</label>
+                                        <label for="editStringValue1" class="form-label">String Off:</label>
                                         <input type="text" id="editStringValue1" name="editStringValue1" class="form-input-base w-full">
                                     </div>
-                                    <!-- String Value 2 (Initially hidden, shown for string type) -->
+                                    <!-- String On (was String Value 2) (Initially hidden, shown for string type) -->
                                     <div class="form-control-group" id="groupStringValue2" style="display: none;">
-                                        <label for="editStringValue2" class="form-label">String Value 2:</label>
+                                        <label for="editStringValue2" class="form-label">String On:</label>
                                         <input type="text" id="editStringValue2" name="editStringValue2" class="form-input-base w-full">
                                     </div>
                                     <div class="grid grid-cols-2 gap-3">

@@ -355,6 +355,29 @@ class WebService:
                 self.logger.error(f"WebService: Failed to delete channel '{channel_name}'. Error: {message}")
                 self.socketio.emit('channel_operation_status', {'success': False, 'message': message, 'channel_name': channel_name, 'operation': 'delete'}, room=sid)
 
+        @self.socketio.on('rename_channel')
+        def handle_rename_channel(data, *args):
+            sid = request.sid
+            old_name = data.get('old_name')
+            new_name = data.get('new_name')
+            self.logger.info(f"rename_channel: '{old_name}' -> '{new_name}' from {sid[:6]}…")
+
+            if not old_name or not new_name:
+                self.logger.error(f"WebService: Invalid data for rename_channel from SID {sid}. Old or new name missing.")
+                self.socketio.emit('channel_operation_status', {'success': False, 'message': 'Old and new channel names are required.', 'operation': 'rename'}, room=sid)
+                return
+
+            success, message, new_config = self.config_service.rename_internal_channel(old_name, new_name)
+            if success:
+                self.logger.debug(f"channel renamed: '{old_name}' -> '{new_name}'")
+                self.socketio.emit('active_config_updated', new_config) # Broadcast to all
+                self.socketio.emit('channel_operation_status', {'success': True, 'message': message, 'channel_name': new_name, 'operation': 'rename'}, room=sid)
+                if self.osc_service:
+                    self.osc_service.reload_config()
+            else:
+                self.logger.error(f"WebService: Failed to rename channel '{old_name}' -> '{new_name}'. Error: {message}")
+                self.socketio.emit('channel_operation_status', {'success': False, 'message': message, 'channel_name': old_name, 'operation': 'rename'}, room=sid)
+
         # --------------- Input Mapping Handlers --------------- 
         @self.socketio.on('update_input_mapping')
         def handle_update_input_mapping(data, *args):

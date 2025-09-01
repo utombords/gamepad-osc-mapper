@@ -31,6 +31,7 @@ App.ChannelManager = (function() {
     let editStringValue2 = null;   // Input for the second string value (for 'string' type).
     let groupStringValue1 = null;    // Parent group for the first string value input.
     let groupStringValue2 = null;    // Parent group for the second string value input.
+    let editChannelNameInput = null; // Input for channel name (new)
     let editOscAddressInput = null;  // Input for the OSC address.
     let editChannelMappedInputsContainer = null; // Container to list inputs mapped to this channel.
     let editChannelForm = null;      // The form element for editing a channel.
@@ -75,6 +76,7 @@ App.ChannelManager = (function() {
         groupStringValue1 = document.getElementById('groupStringValue1');
         groupStringValue2 = document.getElementById('groupStringValue2');
 
+        editChannelNameInput = document.getElementById('editChannelName');
         editOscAddressInput = document.getElementById('editOscAddress');
         editChannelMappedInputsContainer = document.getElementById('editChannelMappedInputsContainer');
         editChannelForm = document.getElementById('editChannelForm');
@@ -434,6 +436,7 @@ App.ChannelManager = (function() {
            selectedChannelLabel.classList.add('badge-channel-edit-active'); // Style the label for active edit.
         }
 
+        if (editChannelNameInput) editChannelNameInput.value = channelName;
         editOscTypeSelect.value = channel.osc_type || 'float';
         _updateEditPanelForOscType(editOscTypeSelect.value); // Initial UI update based on type.
 
@@ -566,7 +569,16 @@ App.ChannelManager = (function() {
                 updatedChannelData.range = [rangeMinVal, rangeMaxVal];
                 delete updatedChannelData.osc_strings; // Remove string-specific field.
             }
+            const desiredName = (editChannelNameInput ? editChannelNameInput.value.trim() : channelName);
+            const wantsRename = desiredName && desiredName !== channelName;
+
+            // First, update channel properties
             App.SocketManager.emit('update_channel', { name: channelName, data: updatedChannelData });
+
+            // Then, if name changed, request rename
+            if (wantsRename) {
+                App.SocketManager.emit('rename_channel', { old_name: channelName, new_name: desiredName });
+            }
         };
 
         // Attach listener for OSC type change if not already attached.

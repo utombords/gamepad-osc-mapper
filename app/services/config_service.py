@@ -230,6 +230,51 @@ class ConfigService:
         logger.info(f"Updated internal channel: {channel_name} with {properties_to_update}")
         return True, f"Channel '{channel_name}' updated successfully.", self.active_config
 
+    def rename_internal_channel(self, old_name: str, new_name: str):
+        """Rename a channel and update all references in input mappings.
+
+        - Validates uniqueness and basic character safety for new_name.
+        - Moves the channel definition and preserves its properties.
+        - Updates any mapping target_name entries (string or list) that reference the old name.
+        """
+        if not old_name or not new_name:
+            return False, "Both old and new channel names are required.", self.active_config
+        if old_name == new_name:
+            return True, "Channel name unchanged.", self.active_config
+        channels = self.active_config.get('internal_channels', {})
+        if old_name not in channels:
+            return False, f"Channel '{old_name}' not found.", self.active_config
+        # Basic sanitization: allow alnum, space, underscore, hyphen
+        safe_new = "".join(c for c in new_name if c.isalnum() or c in (' ', '_', '-')).rstrip()
+        if not safe_new:
+            return False, "New channel name contains no valid characters.", self.active_config
+        if safe_new in channels:
+            return False, f"Channel '{safe_new}' already exists.", self.active_config
+
+        # Move channel definition
+        channel_props = channels.pop(old_name)
+        channel_props['name'] = safe_new
+        channels[safe_new] = channel_props
+
+        # Update mappings across all layers
+        layers = self.active_config.get('layers', {})
+        for layer_id, layer_data in layers.items():
+            input_mappings = layer_data.get('input_mappings', {})
+            for input_name, mapping in input_mappings.items():
+                try:
+                    if mapping.get('target_type') != 'osc_channel':
+                        continue
+                    tname = mapping.get('target_name')
+                    if isinstance(tname, str) and tname == old_name:
+                        mapping['target_name'] = safe_new
+                    elif isinstance(tname, list) and old_name in tname:
+                        mapping['target_name'] = [safe_new if n == old_name else n for n in tname]
+                except Exception:
+                    continue
+
+        self.save_active_config()
+        return True, f"Channel renamed to '{safe_new}'.", self.active_config
+
     def delete_internal_channel(self, channel_name):
         """Delete an internal channel and clear dependent mapping references."""
         if 'internal_channels' not in self.active_config or \
@@ -239,30 +284,34 @@ class ConfigService:
         del self.active_config['internal_channels'][channel_name]
         logger.info(f"Deleted internal channel: {channel_name}")
 
-        # Remove references from layer input mappings
+        # Remove references from layer input mappings (new-style structure)
         layers = self.active_config.get('layers', {})
         for layer_id, layer_data in layers.items():
-            if 'input_mappings' in layer_data:
-                mappings_to_delete = []
-                for input_name, mapping_details in layer_data['input_mappings'].items():
-                    target = mapping_details.get('target')
-                    modified = False
-                    if isinstance(target, str) and target == channel_name:
-                        # Option 2: Clear the target (making it an unmapped input)
-                        mapping_details['target'] = None # Or an empty string/specific marker
-                        mapping_details['action'] = None # Clear action as well
-                        # Add more fields to clear as necessary based on mapping structure
-                        logger.info(f"Cleared target for input '{input_name}' in layer '{layer_id}' due to channel '{channel_name}' deletion.")
-                        modified = True
-                    elif isinstance(target, list) and channel_name in target:
-                        target.remove(channel_name)
-                        logger.info(f"Removed '{channel_name}' from target list for input '{input_name}' in layer '{layer_id}'. New target: {target}")
-                        if not target: # If list becomes empty
-                            mapping_details['target'] = None
-                            mapping_details['action'] = None
-                        modified = True
-                    
-                # Lines related to "Option 1" previously here are now removed.
+            input_mappings = layer_data.get('input_mappings', {})
+            inputs_to_delete = []
+            for input_name, mapping_details in input_mappings.items():
+                try:
+                    target_type = mapping_details.get('target_type')
+                    target_name = mapping_details.get('target_name')
+                    if target_type != 'osc_channel':
+                        continue
+                    if isinstance(target_name, str) and target_name == channel_name:
+                        inputs_to_delete.append(input_name)
+                    elif isinstance(target_name, list) and channel_name in target_name:
+                        target_name.remove(channel_name)
+                        logger.info(f"Removed channel '{channel_name}' from targets for input '{input_name}' on layer '{layer_id}'.")
+                        # If list becomes empty after removal, delete the whole mapping entry
+                        if not target_name:
+                            inputs_to_delete.append(input_name)
+                except Exception as e:
+                    logger.error(f"Error while cleaning channel refs for input '{input_name}' on layer '{layer_id}': {e}")
+            # Delete inputs whose mapping is now invalid/empty
+            for input_name in inputs_to_delete:
+                try:
+                    del input_mappings[input_name]
+                    logger.info(f"Deleted mapping for input '{input_name}' on layer '{layer_id}' due to channel '{channel_name}' deletion.")
+                except Exception as e:
+                    logger.error(f"Failed deleting mapping for input '{input_name}' on layer '{layer_id}': {e}")
 
         self.save_active_config()
         return True, f"Channel '{channel_name}' deleted successfully and references cleared.", self.active_config
@@ -375,16 +424,55 @@ class ConfigService:
             return True, f"No changes applied to internal variable '{variable_name}'.", self.active_config
 
     def delete_internal_variable(self, variable_name):
-        """Delete an internal variable by name."""
+        """Delete an internal variable and clear dependent mapping references."""
         if 'internal_variables' not in self.active_config or \
            variable_name not in self.active_config['internal_variables']:
             return False, f"Internal variable '{variable_name}' not found for deletion.", self.active_config
 
         del self.active_config['internal_variables'][variable_name]
         logger.info(f"Deleted internal variable: {variable_name}")
-        # TODO: Consider removing references from input mappings as done for channels
+
+        # Remove references from layer input mappings for both new-style and legacy mappings
+        layers = self.active_config.get('layers', {})
+        for layer_id, layer_data in layers.items():
+            input_mappings = layer_data.get('input_mappings', {})
+            inputs_to_delete = []
+            for input_name, mapping_details in input_mappings.items():
+                try:
+                    # New style: target_type == 'internal_variable' and target_name matches
+                    target_type = mapping_details.get('target_type')
+                    target_name = mapping_details.get('target_name')
+                    # Legacy style: actions that explicitly reference target_variable
+                    legacy_target_variable = mapping_details.get('target_variable')
+
+                    should_delete = False
+                    if target_type == 'internal_variable' and target_name == variable_name:
+                        should_delete = True
+                    # Legacy actions referencing variables
+                    if legacy_target_variable == variable_name and mapping_details.get('action') in (
+                        'set_variable', 'toggle_variable'
+                    ):
+                        should_delete = True
+                    # Also catch legacy-style variable-targeted actions that used target_type + name
+                    if target_type == 'internal_variable' and mapping_details.get('action') in (
+                        'increment', 'decrement', 'set_value_from_input', 'step_by_multiplier_on_trigger'
+                    ) and target_name == variable_name:
+                        should_delete = True
+
+                    if should_delete:
+                        inputs_to_delete.append(input_name)
+                except Exception as e:
+                    logger.error(f"Error while cleaning variable refs for input '{input_name}' on layer '{layer_id}': {e}")
+
+            for input_name in inputs_to_delete:
+                try:
+                    del input_mappings[input_name]
+                    logger.info(f"Deleted mapping for input '{input_name}' on layer '{layer_id}' due to variable '{variable_name}' deletion.")
+                except Exception as e:
+                    logger.error(f"Failed deleting mapping for input '{input_name}' on layer '{layer_id}': {e}")
+
         self.save_active_config()
-        return True, f"Internal variable '{variable_name}' deleted successfully.", self.active_config
+        return True, f"Internal variable '{variable_name}' deleted successfully and references cleared.", self.active_config
 
     # --- Internal variable helpers used by processing/service layers ---
     def get_internal_variable_value(self, variable_name: str):

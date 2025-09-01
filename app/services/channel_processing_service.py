@@ -79,6 +79,9 @@ class ChannelProcessingService:
         self.pending_channel_value = {}
         self.pending_channel_ts = {}
         self.pending_channel_meta = {}
+        # Track raw-state change to trigger trailing snapshot emits without spamming
+        self.raw_state_changed = False
+        self.last_raw_event_time = 0.0
 
         if self.input_service:
             self.input_service.register_input_listener(self.handle_input_update)
@@ -434,6 +437,14 @@ class ChannelProcessingService:
                         self.pending_channel_ts.pop(ch_name, None)
                         self.pending_channel_meta.pop(ch_name, None)
 
+            # UI raw input snapshot: emit only when state changed, max ~30Hz
+            if self.socketio and self.raw_state_changed and (now - self.last_raw_emit_time) >= self.raw_emit_interval:
+                with self.continuous_actions_lock:
+                    raw_snapshot = dict(self.raw_controller_states)
+                self.socketio.emit('raw_inputs_update', raw_snapshot)
+                self.last_raw_emit_time = now
+                self.raw_state_changed = False
+
             if self.osc_service:
                 self.osc_service.send_bundled_messages()
 
@@ -538,10 +549,9 @@ class ChannelProcessingService:
                 self.raw_controller_states[controller_id] = {}
             self.raw_controller_states[controller_id][generic_input_name] = value
             self._update_merged_states()
-
-            if self.socketio and (current_time - self.last_raw_emit_time > self.raw_emit_interval):
-                self.socketio.emit('raw_inputs_update', self.raw_controller_states)
-                self.last_raw_emit_time = current_time
+            # Mark raw-state changed; periodic loop will emit a trailing snapshot (<= ~33ms)
+            self.raw_state_changed = True
+            self.last_raw_event_time = current_time
         
         with self.continuous_actions_lock:
             mapping_config = self.discrete_action_mappings_for_current_layer.get(generic_input_name)

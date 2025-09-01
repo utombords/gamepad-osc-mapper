@@ -25,6 +25,9 @@ App.InputMappingView = (function() {
         "GYRO_X", "GYRO_Y", "GYRO_Z"
     ]);
 
+    // UI-only threshold: single deadzone for all analog inputs (sticks, triggers)
+    const UI_ANALOG_ACTIVITY_DEADZONE = 0.1; // Visualization only; does not affect processing/mappings
+
     /**
      * Fetches and stores the raw-to-generic input name mappings from the server.
      * This map is used to translate controller-specific input names to standardized generic IDs.
@@ -317,7 +320,7 @@ App.InputMappingView = (function() {
 
                 if (typeof rawValue === 'number') {
                     currentRawValue = rawValue;
-                    if (Math.abs(rawValue) >= 0.01) { // Consider active if value is non-trivial.
+                    if (Math.abs(rawValue) >= UI_ANALOG_ACTIVITY_DEADZONE) { // Consider active only above UI threshold.
                         currentRawActive = true;
                     }
                 } else if (typeof rawValue === 'boolean' && rawValue) {
@@ -595,7 +598,7 @@ App.InputMappingView = (function() {
         if (targetType === 'osc_channel') {
             const checkboxContainer = document.createElement('div');
             checkboxContainer.id = `mapping-target-name-osc-container-${layerId}-${inputId}`;
-            checkboxContainer.className = 'osc-channel-checkbox-container mt-1 space-y-1'; 
+            checkboxContainer.className = 'osc-channel-checkbox-container mt-1 space-y-0.5'; 
 
             const channels = currentConfig.internal_channels || {};
             const selectedChannels = Array.isArray(targetNameValue) ? targetNameValue : (targetNameValue ? [targetNameValue] : []);
@@ -606,10 +609,24 @@ App.InputMappingView = (function() {
                 noChannelsMsg.textContent = 'No OSC channels defined yet.';
                 checkboxContainer.appendChild(noChannelsMsg);
             } else {
-                for (const channelName in channels) {
-                    const channelWrapper = document.createElement('div');
-                    channelWrapper.className = 'flex items-center';
+                // Optional header row
+                const headerRow = document.createElement('div');
+                headerRow.className = 'grid grid-cols-12 gap-1 px-2 py-0.5 text-xs text-gray-400';
+                headerRow.innerHTML = `
+                    <div class="col-span-1"></div>
+                    <div class="col-span-3">Name</div>
+                    <div class="col-span-5">OSC Address</div>
+                    <div class="col-span-3">On Value</div>
+                `;
+                checkboxContainer.appendChild(headerRow);
 
+                const channelEntries = Object.entries(channels).sort(([aName], [bName]) => aName.localeCompare(bName));
+                channelEntries.forEach(([channelName, channelData]) => {
+                    const channelWrapper = document.createElement('div');
+                    channelWrapper.className = 'grid grid-cols-12 items-center gap-1 px-2 py-0.5 hover:bg-gray-700/30 rounded';
+
+                    const checkboxCell = document.createElement('div');
+                    checkboxCell.className = 'col-span-1 flex items-center';
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
                     checkbox.id = `mapping-target-osc-${layerId}-${inputId}-${channelName}`;
@@ -619,22 +636,52 @@ App.InputMappingView = (function() {
                     if (selectedChannels.includes(channelName)) {
                         checkbox.checked = true;
                     }
-                    
                     checkbox.addEventListener('change', () => {
-                        const selected = Array.from(checkboxContainer.querySelectorAll('input[type="checkbox"]:checked'))
-                                           .map(cb => cb.value);
+                        const selected = Array.from(checkboxContainer.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
                         _populateActionDropdown(layerId, inputId, targetType, selected);
-                        // Parameter UI is handled by _populateActionParameters, no need to clear here.
                     });
-                    channelWrapper.appendChild(checkbox);
+                    checkboxCell.appendChild(checkbox);
+                    channelWrapper.appendChild(checkboxCell);
 
-                    const label = document.createElement('label');
-                    label.htmlFor = checkbox.id;
-                    label.textContent = channelName;
-                    label.className = 'ml-2 text-sm';
-                    channelWrapper.appendChild(label);
+                    const nameCell = document.createElement('label');
+                    nameCell.htmlFor = checkbox.id;
+                    nameCell.className = 'col-span-3 text-sm text-gray-200 truncate';
+                    nameCell.textContent = channelName;
+                    channelWrapper.appendChild(nameCell);
+
+                    const addr = (channelData && channelData.osc_address) ? channelData.osc_address : '';
+                    const addrCell = document.createElement('div');
+                    addrCell.className = 'col-span-5 text-xs text-gray-400 font-mono truncate';
+                    addrCell.title = addr || '';
+                    addrCell.textContent = addr || '';
+                    channelWrapper.appendChild(addrCell);
+
+                    // Derive a sensible "On" value preview
+                    let onValueDisplay = '';
+                    try {
+                        const oscType = channelData && channelData.osc_type ? String(channelData.osc_type) : 'float';
+                        if (oscType === 'string') {
+                            const strs = Array.isArray(channelData && channelData.osc_strings) ? channelData.osc_strings : [];
+                            onValueDisplay = (strs.length > 1 ? String(strs[1]) : (strs.length > 0 ? String(strs[0]) : ''));
+                        } else {
+                            if (channelData && Array.isArray(channelData.range) && channelData.range.length === 2) {
+                                onValueDisplay = String(channelData.range[1]);
+                            } else if (channelData && (channelData.max_value !== undefined || channelData.range_max !== undefined)) {
+                                onValueDisplay = String(channelData.max_value !== undefined ? channelData.max_value : channelData.range_max);
+                            } else {
+                                onValueDisplay = '';
+                            }
+                        }
+                    } catch (e) { onValueDisplay = ''; }
+
+                    const onCell = document.createElement('div');
+                    onCell.className = 'col-span-3 text-xs text-gray-300 truncate';
+                    onCell.title = onValueDisplay;
+                    onCell.textContent = onValueDisplay;
+                    channelWrapper.appendChild(onCell);
+
                     checkboxContainer.appendChild(channelWrapper);
-            }
+                });
             }
             container.appendChild(checkboxContainer);
             
@@ -1100,6 +1147,13 @@ App.InputMappingView = (function() {
 
         console.log("InputMappingView: Saving mapping data (final before send):", JSON.parse(JSON.stringify(mappingData)), "For Layer:", layerId, "Input:", inputId, "SaveAll:", saveToAllLayers);
         App.ConfigManager.updateInputMapping(layerId, inputId, mappingData, saveToAllLayers);
+
+        // UX: Close the editor immediately to indicate save action was performed.
+        const mappingConfigArea = document.getElementById(`input-mapping-config-area-${layerId.toLowerCase()}`);
+        if (mappingConfigArea) {
+            mappingConfigArea.innerHTML = '<p class="text-gray-400 italic">Mapping saved. Select an input to configure its mapping.</p>';
+        }
+        App.ConfigManager.setSelectedInput(null);
     }
 
     /**
