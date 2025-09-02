@@ -13,7 +13,6 @@ App.ChannelManager = (function() {
     // 'Add Channel' Modal Elements
     let addChannelModal = null;
     let newChannelNameInput = null;
-    let confirmAddChannelBtn = null;
     let cancelAddChannelBtn = null;
     let newChannelNameError = null;
     let addChannelForm = null;
@@ -42,6 +41,7 @@ App.ChannelManager = (function() {
     let _currentChannelRuntimeValues = {}; // Cache for live (runtime) channel values.
     let _currentConfig = null; // Cache for the current configuration
     let _currentEditingChannelName = null; // Cache for the current editing channel name
+    let _pendingChannelToEdit = null; // If a channel was just added, open editor after config update
 
     /**
      * Caches frequently accessed DOM elements for the module.
@@ -56,7 +56,6 @@ App.ChannelManager = (function() {
         // 'Add Channel' Modal
         addChannelModal = document.getElementById('addChannelModal');
         newChannelNameInput = document.getElementById('newChannelNameInput');
-        confirmAddChannelBtn = document.getElementById('confirmAddChannelBtn');
         cancelAddChannelBtn = document.getElementById('cancelAddChannelBtn');
         newChannelNameError = document.getElementById('newChannelNameError');
         addChannelForm = document.getElementById('addChannelForm');
@@ -322,6 +321,8 @@ App.ChannelManager = (function() {
             osc_type: 'float' // Default OSC type.
         };
         
+        // Track desired name to auto-open after config update
+        _pendingChannelToEdit = channelNameFromInput;
         App.SocketManager.emit('add_channel', channelData);
         _hideAddChannelModal(); // Hide modal after submission.
     }
@@ -402,7 +403,7 @@ App.ChannelManager = (function() {
      * Populates and displays the 'Edit Channel' panel for a given channel.
      * @param {string} channelName - The name of the channel to edit.
      */
-    function _editChannel(channelName) {
+    function _editChannel(channelName, skipTabSwitch = false) {
         const fullConfig = App.ConfigManager.getConfig();
         if (!fullConfig || !fullConfig.internal_channels || !fullConfig.internal_channels[channelName]) {
             alert('Channel data not found. Cannot edit.');
@@ -410,7 +411,9 @@ App.ChannelManager = (function() {
         }
         const channel = fullConfig.internal_channels[channelName];
 
-        App.UIManager.showTab('osc-channels-tab'); // Ensure the OSC Channels tab is visible.
+        if (!skipTabSwitch && App.UIManager && typeof App.UIManager.showTab === 'function') {
+            App.UIManager.showTab('osc-channels-tab'); // Ensure the OSC Channels tab is visible when invoked by user.
+        }
 
         // Visually highlight the channel being edited in the list.
         document.querySelectorAll('#channels-list-area > div.channel-item-editing').forEach(el => {
@@ -643,7 +646,7 @@ App.ChannelManager = (function() {
      * Caches DOM elements, sets up event listeners, and subscribes to configuration updates.
      */
     function init() {
-        console.log("ChannelManager: Initializing...");
+        // Initialize ChannelManager and cache DOM elements
         _cacheDomElements();
 
         if (!channelsListArea) {
@@ -715,12 +718,19 @@ App.ChannelManager = (function() {
                     _updateChannelMeter(data.name, data.value);
                 }
             });
-            console.log("ChannelManager: Subscribed to 'channel_value_update' from SocketManager.");
+            // Subscribed to 'channel_value_update'
+            App.SocketManager.on('channel_operation_status', (status) => {
+                try {
+                    if (status && status.success && status.operation === 'add' && status.channel_name) {
+                        _pendingChannelToEdit = status.channel_name;
+                    }
+                } catch (e) { /* ignore */ }
+            });
         } else {
             console.error("ChannelManager: App.SocketManager not available to subscribe to 'channel_value_update'.");
         }
 
-        console.log("ChannelManager: Initialization complete.");
+        // Initialization complete
     }
 
     /**
@@ -827,11 +837,21 @@ App.ChannelManager = (function() {
                 // Re-populate the edit panel with the updated config
                 // The _editChannel function reads from _currentConfig which we just updated
                 console.log(`ChannelManager: Config updated. Refreshing edit panel for '${_currentEditingChannelName}'.`);
-                _editChannel(_currentEditingChannelName); 
+                // Refresh fields without switching tabs if already editing
+                _editChannel(_currentEditingChannelName, true); 
             } else {
                 // The channel being edited was deleted, so close the panel
                 console.log(`ChannelManager: Config updated. Channel '${_currentEditingChannelName}' no longer exists. Closing edit panel.`);
                 _cancelChannelEdit(); // Assumes this function correctly resets state and hides UI
+            }
+        }
+
+        // Open editor for newly added channel once it exists in config
+        if (_pendingChannelToEdit && newConfig && newConfig.internal_channels) {
+            if (newConfig.internal_channels[_pendingChannelToEdit]) {
+                const nameToEdit = _pendingChannelToEdit;
+                _pendingChannelToEdit = null;
+                _editChannel(nameToEdit);
             }
         }
     }

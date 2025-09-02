@@ -29,6 +29,10 @@ App.ChannelUtils = (function() {
 
     function sortChannelEntries(entries, mode) {
         const sortMode = mode || getSortMode();
+        // For "recent", preserve insertion order (object order from backend) but reverse so newest are first.
+        if (sortMode === 'recent') {
+            return entries.slice().reverse();
+        }
         return entries.slice().sort(([nameA, chA], [nameB, chB]) => {
             if (sortMode === 'address') {
                 const a = (chA && chA.osc_address) ? String(chA.osc_address) : '';
